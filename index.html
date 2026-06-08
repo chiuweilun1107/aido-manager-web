@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>智慧經理 — 公司的 AI 行政經理｜請假・報帳・採購・用印自動辦</title>
+<meta name="description" content="智慧經理是公司的 AI 行政小幫手——員工動動嘴，請假、報帳、採購、用印的單子自動填好、送出、追到簽完。">
+<style>
+  :root{
+    --blue-50:#fafcff; --blue-100:#e8f1ff; --blue-200:#bddaff; --blue-300:#80b6ff;
+    --blue-400:#3d91ff; --blue-500:#0565ff; --blue-600:#044dc2; --blue-700:#053485; --blue-800:#072252;
+    --pink-500:#c72c91; --earth-500:#f58220; --earth-600:#e55c00; --air-500:#4aa147; --air-600:#317a2e; --space-500:#5b57c2; --turq-500:#12a6b2;
+    --air-100:#e4fae3; --earth-100:#faf4e3; --space-100:#ededff; --turq-100:#dcfafc;
+    --caution:#e0453a; --caution-700:#8a241c;
+    --text:#1d2b36; --text-2:#2c3c4d; --muted:#6b8196; --border:#d3dee8; --ash-500:#b4c4d4;
+    --surface:#ffffff; --surface-subtle:#e8f1ff; --surface-muted:#f9fbfc;
+    --radius-sm:6px; --radius:8px; --radius-lg:12px; --radius-xl:16px; --pill:999px;
+    --shadow-sm:0 2px 8px rgba(0,0,0,.08); --shadow-md:0 5px 18px rgba(5,101,255,.14);
+    --ease:cubic-bezier(.4,0,.2,1);
+    --font:"Graphik Web","Inter",system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;
+    --max:1200px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{font-family:var(--font);color:var(--text);background:var(--surface);line-height:1.6;-webkit-font-smoothing:antialiased}
+  a{color:inherit;text-decoration:none}
+  img{max-width:100%;display:block}
+  .wrap{max-width:var(--max);margin:0 auto;padding:0 24px}
+  .accent-blue{color:var(--blue-500)} .accent-pink{color:var(--pink-500)}
+
+  .btn{display:inline-flex;align-items:center;gap:8px;font-size:16px;font-weight:600;padding:13px 26px;border-radius:var(--pill);border:1px solid transparent;cursor:pointer;transition:all .15s var(--ease);white-space:nowrap}
+  .btn-primary{background:var(--blue-500);color:#fff} .btn-primary:hover{background:var(--blue-600);box-shadow:var(--shadow-md);transform:translateY(-1px)}
+  .btn-ghost{background:#fff;color:var(--blue-600);border-color:var(--border)} .btn-ghost:hover{background:var(--blue-50);border-color:var(--blue-300)}
+  .btn-lg{font-size:17px;padding:15px 32px}
+
+  header.nav{position:sticky;top:0;z-index:50;background:rgba(255,255,255,.9);backdrop-filter:saturate(180%) blur(12px);border-bottom:1px solid transparent;transition:border-color .3s,box-shadow .3s}
+  header.nav.scrolled{border-color:var(--border);box-shadow:var(--shadow-sm)}
+  .nav-inner{display:flex;align-items:center;justify-content:space-between;height:74px}
+  .logo{display:flex;align-items:center;gap:10px;font-weight:700;font-size:21px;letter-spacing:-.5px}
+  .logo .mark{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,var(--blue-500),var(--space-500));display:grid;place-items:center;color:#fff}
+  .nav-links{display:flex;gap:32px;align-items:center}
+  .nav-links a{font-size:16px;color:var(--text-2);transition:color .15s} .nav-links a:hover{color:var(--blue-500)}
+  .nav-cta{display:flex;gap:12px;align-items:center}
+  .hamb{display:none;background:none;border:0;cursor:pointer}
+
+  .hero{padding:72px 0 64px;overflow:hidden}
+  .hero-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:48px;align-items:center}
+  h1.headline{font-size:clamp(32px,4.4vw,58px);font-weight:900;line-height:1.08;letter-spacing:-2px;color:var(--text)}
+  .hero p.sub{font-size:clamp(18px,2vw,21px);color:var(--text-2);margin:24px 0 32px;max-width:30em;letter-spacing:-.3px}
+  .hero-cta{display:flex;gap:14px;flex-wrap:wrap}
+  .hero-note{margin-top:16px;font-size:14px;color:var(--muted)}
+  .hero-visual{position:relative}
+  .hero-visual img{border-radius:var(--radius-xl);background:linear-gradient(180deg,var(--blue-50),#fff)}
+  .hero-visual::before{content:"";position:absolute;inset:-8% -6% -6% -8%;background:radial-gradient(60% 60% at 60% 40%,rgba(5,101,255,.10),transparent 70%);z-index:-1}
+
+  section{padding:80px 0}
+  .sec-head{text-align:center;max-width:40em;margin:0 auto 48px}
+  .sec-head .overline{margin-bottom:16px}
+  .overline{display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--blue-600);background:var(--blue-100);padding:6px 14px;border-radius:var(--pill)}
+  h2{font-size:clamp(30px,3.6vw,46px);font-weight:600;line-height:1.12;letter-spacing:-1.5px}
+  .sec-head p{font-size:18px;color:var(--text-2);margin-top:14px}
+
+  .logos{padding:44px 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border);background:var(--surface-muted)}
+  .logos .lead{text-align:center;font-size:14px;color:var(--muted);letter-spacing:.04em;margin-bottom:22px}
+  .logo-row{display:flex;flex-wrap:wrap;justify-content:center;gap:18px 40px;align-items:center;opacity:.72}
+  .logo-row span{font-weight:700;font-size:19px;color:var(--text-2);letter-spacing:-.5px}
+
+  /* ===== Solutions (痛點紅字常駐 + 右解法動畫) ===== */
+  .sol-grid{display:grid;grid-template-columns:.82fr 1.18fr;gap:40px;align-items:stretch}
+  .sol-list{display:flex;flex-direction:column;gap:6px}
+  .sol-item{text-align:left;background:none;border:0;border-left:3px solid transparent;padding:16px 20px;cursor:pointer;border-radius:0 10px 10px 0;transition:.25s var(--ease);font-family:inherit}
+  .sol-item .sol-role{display:block;font-size:23px;font-weight:700;color:var(--text-2);letter-spacing:-.5px;transition:.25s}
+  .sol-item .sol-pain{display:block;font-size:13px;color:var(--caution);margin-top:5px;line-height:1.45;font-weight:500}
+  .sol-item:hover{background:var(--surface-muted)}
+  .sol-item.active{border-left-color:var(--blue-500);background:var(--blue-50)}
+  .sol-item.active .sol-role{color:var(--text)}
+  .sol-panel{position:relative;min-height:420px;display:flex;align-items:center}
+  .sol-ui{display:none;width:100%}
+  .sol-ui.show{display:block}
+  .appwin{background:#fff;border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow-md);overflow:hidden}
+  .appwin-bar{display:flex;align-items:center;gap:7px;padding:11px 16px;background:var(--surface-muted);border-bottom:1px solid var(--border)}
+  .appwin-bar .d{width:10px;height:10px;border-radius:50%}.appwin-bar .d.r{background:#ff5f57}.appwin-bar .d.y{background:#febc2e}.appwin-bar .d.g{background:#28c840}
+  .appwin-title{margin-left:9px;font-size:13.5px;font-weight:600;color:var(--text-2)}
+  .appwin-title .cnt{color:var(--blue-600)}
+  .appwin-body{padding:20px;min-height:300px}
+  .stat-row{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px}
+  .stat{background:var(--surface-muted);border-radius:10px;padding:13px 15px}
+  .stat .n{font-size:23px;font-weight:700;color:var(--blue-600);letter-spacing:-.5px}
+  .stat .n small{font-size:12px;color:var(--air-600);font-weight:600}
+  .stat .l{font-size:12px;color:var(--muted);margin-top:2px}
+  .urow{display:flex;align-items:center;gap:12px;padding:12px 14px;border:1px solid var(--border);border-radius:10px;margin-bottom:9px;opacity:0;transform:translateY(8px);transition:opacity .4s var(--ease),transform .4s var(--ease),background .3s}
+  .urow.in{opacity:1;transform:none}
+  .urow.cleared{background:var(--air-100);border-color:#bfedbe}
+  .urow.fade{opacity:.35}
+  .urow .ut{flex:1;min-width:0}.urow .ut b{font-size:14.5px;display:block}.urow .ut small{display:block;color:var(--muted);font-size:12.5px;margin-top:1px}
+  .chip{font-size:11.5px;font-weight:600;padding:3px 10px;border-radius:var(--pill);white-space:nowrap}
+  .chip.wait{background:var(--earth-100);color:var(--earth-600)}
+  .chip.done{background:var(--air-100);color:var(--air-600)}
+  .chip.prog{background:var(--blue-100);color:var(--blue-600)}
+  .mini-btn{font-size:12.5px;font-weight:600;padding:6px 13px;border-radius:var(--pill);border:0;cursor:pointer}
+  .mini-btn.ok{background:var(--blue-500);color:#fff}
+  .mini-btn.gho{background:#fff;border:1px solid var(--border);color:var(--text-2)}
+  .uihint{font-size:12.5px;color:var(--muted);margin-top:14px;display:flex;align-items:flex-start;gap:6px;opacity:0;transition:opacity .5s}
+  .uihint.in{opacity:1}
+  .uihint b{color:var(--blue-600)}
+  .barrow{display:flex;align-items:center;gap:12px;font-size:13px;margin-bottom:11px}
+  .barrow .bl{width:64px;color:var(--text-2)}.barrow .bt{flex:1;height:8px;background:var(--surface-muted);border-radius:99px;overflow:hidden}
+  .barrow .bf{height:100%;width:0;background:var(--blue-500);border-radius:99px;transition:width 1s var(--ease)}.barrow .bv{width:42px;text-align:right;color:var(--muted);font-size:12px}
+  /* chat (員工動畫) */
+  .chatwin .cbody{padding:18px 18px;min-height:300px;display:flex;flex-direction:column;gap:11px}
+  .msg{display:flex;gap:9px;max-width:92%;animation:msgIn .4s var(--ease)}
+  .msg.user{align-self:flex-end;flex-direction:row-reverse}.msg.ai{align-self:flex-start}
+  @keyframes msgIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+  .av{width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,var(--blue-500),var(--space-500));display:grid;place-items:center;flex-shrink:0}
+  .bubble{padding:10px 14px;border-radius:15px;font-size:14.5px;line-height:1.5}
+  .msg.user .bubble{background:var(--blue-500);color:#fff;border-bottom-right-radius:4px}
+  .msg.ai .bubble{background:var(--surface-muted);color:var(--text);border:1px solid var(--border);border-bottom-left-radius:4px}
+  .typing{display:inline-flex;gap:4px;align-items:center;height:13px}
+  .typing span{width:6px;height:6px;border-radius:50%;background:var(--ash-500);animation:td 1.2s infinite}
+  .typing span:nth-child(2){animation-delay:.2s}.typing span:nth-child(3){animation-delay:.4s}
+  @keyframes td{0%,60%,100%{opacity:.3}30%{opacity:1}}
+  .lf-mini{background:#fff;border:1px solid var(--border);border-radius:10px;padding:12px 13px;margin-top:4px}
+  .lf-mini .lr{display:flex;align-items:center;gap:10px;margin-bottom:7px;font-size:13px}
+  .lf-mini .lr:last-child{margin-bottom:0}
+  .lf-mini .lk{width:48px;color:var(--muted);flex-shrink:0}
+  .lf-mini .lv{flex:1;border:1px solid var(--border);border-radius:6px;padding:5px 9px;min-height:30px;display:flex;align-items:center;transition:.3s}
+  .lf-mini .lv.done{border-color:var(--air-500)}
+  .lf-mini .lv .tag{margin-left:auto;font-size:10px;color:var(--blue-600);background:var(--blue-100);padding:1px 7px;border-radius:99px;opacity:0;transition:.3s}
+  .lf-mini .lv.done .tag{opacity:1}
+  .cur{display:inline-block;width:2px;height:14px;background:var(--blue-500);animation:bk 1s steps(2) infinite}
+  @keyframes bk{0%,50%{opacity:1}51%,100%{opacity:0}}
+  .c-card{background:#fff;border:1px solid var(--border);border-radius:10px;overflow:hidden;width:100%;max-width:300px;margin-top:4px}
+  .cc-head{padding:9px 13px;background:var(--blue-50);border-bottom:1px solid var(--border);font-size:13px;font-weight:600;color:var(--blue-700)}
+  .cc-body{padding:11px 13px}
+  .cc-row{display:flex;justify-content:space-between;font-size:13.5px;padding:4px 0}
+  .cc-row .k{color:var(--muted)}.cc-row .v{color:var(--text);font-weight:600}
+  .confirm-btns{display:flex;gap:8px}
+  .cbtn{font-size:13.5px;font-weight:600;padding:8px 16px;border-radius:99px;cursor:pointer;border:1px solid var(--border);background:#fff;color:var(--text-2)}
+  .cbtn.yes{color:var(--blue-600);border-color:var(--blue-300)}
+  .bubble.warn{background:#fff7ed;border:1px solid #fed7aa;color:#9a3412}
+  .estep-flow{display:flex;align-items:center;width:100%;max-width:300px;margin-top:4px}
+  .fstep{display:flex;flex-direction:column;align-items:center;gap:5px;text-align:center}
+  .fstep .fdot{width:32px;height:32px;border-radius:50%;border:2px solid var(--border);background:#fff;display:grid;place-items:center;color:var(--muted);font-weight:700;font-size:13px;transition:.4s var(--ease)}
+  .fstep span{font-size:11.5px;color:var(--muted);transition:.4s}
+  .fstep.active .fdot{border-color:var(--blue-500);color:var(--blue-500);box-shadow:0 0 0 4px var(--blue-100)}
+  .fstep.done .fdot{background:var(--air-500);border-color:var(--air-500);color:#fff}
+  .fstep.active span,.fstep.done span{color:var(--text);font-weight:600}
+  .fstep .spin{width:14px;height:14px;border:2px solid var(--blue-200);border-top-color:var(--blue-500);border-radius:50%;animation:spin .7s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .fline{flex:1;height:2px;background:var(--border);margin:0 4px 20px;position:relative;overflow:hidden}
+  .fline::after{content:"";position:absolute;inset:0;width:0;background:var(--air-500);transition:width .6s var(--ease)}
+  .fline.fill::after{width:100%}
+  .demo-replay{text-align:center;margin-top:24px}
+
+  .bento{display:grid;grid-template-columns:1.5fr 1fr 1fr;grid-auto-rows:1fr;gap:20px}
+  .card{background:#fff;border:1px solid var(--border);border-radius:var(--radius-lg);padding:28px;box-shadow:var(--shadow-sm);transition:box-shadow .3s var(--ease),transform .3s var(--ease)}
+  .card:hover{box-shadow:var(--shadow-md);transform:translateY(-3px)}
+  .bento .big{grid-row:span 2;display:flex;flex-direction:column;justify-content:space-between}
+  .bento .big .big-art{margin-top:20px;border-radius:var(--radius);background:linear-gradient(135deg,var(--blue-500),var(--space-500));aspect-ratio:16/10;display:grid;place-items:center}
+  .icon-tile{width:54px;height:54px;border-radius:13px;background:var(--blue-100);color:var(--blue-500);display:grid;place-items:center;margin-bottom:16px}
+  .icon-tile.air{background:var(--air-100);color:var(--air-500)} .icon-tile.earth{background:var(--earth-100);color:var(--earth-500)}
+  .icon-tile.space{background:var(--space-100);color:var(--space-500)} .icon-tile.turq{background:var(--turq-100);color:var(--turq-500)}
+  .card h3{font-size:20px;font-weight:600;letter-spacing:-.5px;margin-bottom:8px}
+  .card p{color:var(--text-2);font-size:15.5px}
+  .bento .big h3{font-size:26px} .bento .big p{font-size:17px}
+
+  .trio{display:grid;grid-template-columns:repeat(4,1fr);gap:20px}
+  .scene{background:#fff;border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;box-shadow:var(--shadow-sm);transition:box-shadow .3s var(--ease),transform .3s var(--ease)}
+  .scene:hover{box-shadow:var(--shadow-md);transform:translateY(-3px)}
+  .scene .scene-top{aspect-ratio:4/3;display:grid;place-items:center}
+  .scene:nth-child(1) .scene-top{background:var(--blue-100)} .scene:nth-child(2) .scene-top{background:var(--air-100)}
+  .scene:nth-child(3) .scene-top{background:var(--earth-100)} .scene:nth-child(4) .scene-top{background:var(--space-100)}
+  .scene .scene-body{padding:22px}
+  .scene h3{font-size:19px;font-weight:600;letter-spacing:-.5px;margin-bottom:6px}
+  .scene p{font-size:14.5px;color:var(--text-2)}
+
+  .quote-wrap{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+  .quote{background:var(--surface-muted);border:1px solid var(--border);border-radius:var(--radius-lg);padding:28px}
+  .quote .q{font-size:17px;color:var(--text);letter-spacing:-.3px;margin-bottom:18px}
+  .quote .who{display:flex;align-items:center;gap:12px}
+  .quote .avatar{width:42px;height:42px;border-radius:var(--pill);background:var(--blue-200);display:grid;place-items:center;color:var(--blue-700);font-weight:700}
+  .quote .who small{display:block;color:var(--muted)}
+  .ph{font-size:12px;color:var(--muted);text-align:center;margin-top:18px}
+
+  .cta-band{text-align:center;background:linear-gradient(180deg,var(--blue-50),#fff)}
+  .cta-band h2{margin-bottom:14px}
+  .cta-band p{font-size:18px;color:var(--text-2);max-width:30em;margin:0 auto 28px}
+
+  footer{background:var(--text);color:#cbd6e0;padding:56px 0 28px;font-size:15px}
+  .foot-grid{display:grid;grid-template-columns:1.6fr 1fr 1fr 1fr;gap:32px;margin-bottom:36px}
+  footer .logo{color:#fff} footer .logo .mark{background:linear-gradient(135deg,var(--blue-400),var(--space-500))}
+  footer h5{color:#fff;font-size:14px;margin:6px 0 14px;letter-spacing:.02em}
+  footer a{display:block;color:#9fb0c0;padding:5px 0;transition:color .15s} footer a:hover{color:#fff}
+  .foot-tag{color:#9fb0c0;margin-top:14px;max-width:24em;font-size:14px}
+  .foot-bottom{border-top:1px solid #2c3c4d;padding-top:20px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;color:#8699ad;font-size:13.5px}
+
+  [data-reveal]{opacity:0;transform:translateY(18px);transition:opacity .6s var(--ease),transform .6s var(--ease)}
+  [data-reveal].in{opacity:1;transform:none}
+  @media (prefers-reduced-motion:reduce){[data-reveal]{opacity:1;transform:none;transition:none}}
+
+  @media(max-width:980px){
+    .hero-grid{grid-template-columns:1fr;gap:32px} .hero-visual{order:-1}
+    .bento{grid-template-columns:1fr 1fr} .bento .big{grid-row:auto;grid-column:span 2}
+    .trio{grid-template-columns:1fr 1fr} .quote-wrap{grid-template-columns:1fr}
+    .foot-grid{grid-template-columns:1fr 1fr}
+  }
+  @media(max-width:880px){.sol-grid{grid-template-columns:1fr;gap:22px}.sol-list{flex-direction:row;overflow-x:auto;gap:8px}.sol-item{border-left:0;border-bottom:3px solid transparent;border-radius:10px 10px 0 0;flex-shrink:0;min-width:200px}.sol-item.active{border-left:0;border-bottom-color:var(--blue-500)}.stat-row{grid-template-columns:1fr 1fr}}
+  @media(max-width:640px){
+    .nav-links{display:none} .hamb{display:block}
+    .bento,.trio{grid-template-columns:1fr} .bento .big{grid-column:auto}
+    .foot-grid{grid-template-columns:1fr 1fr} section{padding:56px 0}
+  }
+</style>
+</head>
+<body>
+
+<header class="nav" id="nav">
+  <div class="wrap nav-inner">
+    <a class="logo" href="#"><span class="mark"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M4 7h16M4 12h10M4 17h13" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/><circle cx="19" cy="14.5" r="3" fill="#fff"/></svg></span>智慧經理</a>
+    <nav class="nav-links">
+      <a href="#solutions">痛點解法</a>
+      <a href="#features">功能</a>
+      <a href="#scenes">適用場景</a>
+      <a href="#voice">客戶</a>
+    </nav>
+    <div class="nav-cta"><a href="#cta" class="btn btn-primary">預約 Demo</a></div>
+    <button class="hamb" aria-label="選單"><svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M4 7h16M4 12h16M4 17h16" stroke="#1d2b36" stroke-width="2.2" stroke-linecap="round"/></svg></button>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="wrap hero-grid">
+    <div data-reveal>
+      <h1 class="headline">員工動動嘴，<br>內部表單 <span class="accent-blue">AI 自動<br>填好、送出、追完簽核</span></h1>
+      <p class="sub">請假、報帳、採購、用印全自動——不用換現有系統，員工免教學就會用。</p>
+      <div class="hero-cta">
+        <a href="#cta" class="btn btn-primary btn-lg">預約免費 Demo</a>
+        <a href="#solutions" class="btn btn-ghost btn-lg">看實際演示</a>
+      </div>
+      <p class="hero-note">✓ 送出永遠由你把關　✓ 每張單全程可追溯</p>
+    </div>
+    <div class="hero-visual" data-reveal>
+      <img src="assets/hero-ai-manager.png" alt="智慧經理 AI 行政助理，自動整理請假、報帳、採購、簽核文件">
+    </div>
+  </div>
+</section>
+
+<div class="logos">
+  <div class="wrap">
+    <p class="lead">受各地企業信賴，每天自動處理上千張內部單據</p>
+    <div class="logo-row"><span>製造業</span><span>連鎖服務</span><span>科技公司</span><span>貿易商</span><span>診所</span><span>會計事務所</span></div>
+    <p class="ph">＊客戶 logo 待補（先以產業別示意）</p>
+  </div>
+</div>
+
+<!-- ===== 痛點 × 解法實際演示（合併區塊）===== -->
+<section id="solutions" class="demo-sec">
+  <div class="wrap">
+    <div class="sec-head" data-reveal>
+      <span class="overline">痛點 × 實際演示</span>
+      <h2>每個角色卡住的地方，<span class="accent-blue">智慧經理當場演給你看</span></h2>
+      <p>左邊紅字是各角色每天的痛——點任一角色，右邊看智慧經理實際怎麼解。</p>
+    </div>
+    <div class="sol-grid" data-reveal>
+      <div class="sol-list" role="tablist">
+        <button class="sol-item active" data-sol="0"><span class="sol-role">員工</span><span class="sol-pain">不知道填哪張表、單子送出後石沉大海、不知卡在誰那</span></button>
+        <button class="sol-item" data-sol="1"><span class="sol-role">主管</span><span class="sol-pain">退件補件來回拖、不知道幾張單卡在我這、各拖多久</span></button>
+        <button class="sol-item" data-sol="2"><span class="sol-role">HR / 行政</span><span class="sol-pain">一直被問「這欄怎麼填」「我的單到哪了」，吃掉大半時間</span></button>
+        <button class="sol-item" data-sol="3"><span class="sol-role">老闆</span><span class="sol-pain">流程黑箱、出事才知道；又怕 AI 亂送不放心</span></button>
+      </div>
+      <div class="sol-panel">
+        <!-- 0 員工：對話自動填表 -->
+        <div class="sol-ui show" data-ui="0">
+          <div class="appwin chatwin">
+            <div class="appwin-bar"><span class="d r"></span><span class="d y"></span><span class="d g"></span><span class="appwin-title">智慧經理 · 幫員工辦事</span></div>
+            <div class="cbody" id="emp-chat"></div>
+          </div>
+        </div>
+        <!-- 1 主管：待簽一鍵批 -->
+        <div class="sol-ui" data-ui="1">
+          <div class="appwin">
+            <div class="appwin-bar"><span class="d r"></span><span class="d y"></span><span class="d g"></span><span class="appwin-title">待我簽核 <span class="cnt" id="mgr-cnt">(0)</span></span></div>
+            <div class="appwin-body" id="mgr-body"></div>
+          </div>
+        </div>
+        <!-- 2 HR：自助問答 -->
+        <div class="sol-ui" data-ui="2">
+          <div class="appwin">
+            <div class="appwin-bar"><span class="d r"></span><span class="d y"></span><span class="d g"></span><span class="appwin-title">員工自助 · AI 即時回覆</span></div>
+            <div class="appwin-body" id="hr-body"></div>
+          </div>
+        </div>
+        <!-- 3 老闆：儀表板 -->
+        <div class="sol-ui" data-ui="3">
+          <div class="appwin">
+            <div class="appwin-bar"><span class="d r"></span><span class="d y"></span><span class="d g"></span><span class="appwin-title">全公司流程儀表板</span></div>
+            <div class="appwin-body" id="boss-body"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="demo-replay"><button id="replayBtn" class="btn btn-ghost">▶ 重播這段演示</button></div>
+  </div>
+</section>
+
+<section id="features">
+  <div class="wrap">
+    <div class="sec-head" data-reveal>
+      <span class="overline">為什麼選智慧經理</span>
+      <h2>把最煩的行政雜事，<span class="accent-blue">自動辦完</span></h2>
+      <p>員工少打字、主管少漏簽、老闆少操心——一個 AI 行政經理全包。</p>
+    </div>
+    <div class="bento">
+      <div class="card big" data-reveal>
+        <div>
+          <div class="icon-tile"><svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3a4 4 0 0 1 4 4v1a4 4 0 0 1-8 0V7a4 4 0 0 1 4-4Zm-7 17a7 7 0 0 1 14 0 1 1 0 0 1-1 1H6a1 1 0 0 1-1-1Z"/></svg></div>
+          <h3>講一句話，單子自動填好送出</h3>
+          <p>員工不用再一格一格手打——說一句「我下週三請特休」，智慧經理就幫你把假單填好、跑完簽核。</p>
+        </div>
+        <div class="big-art">
+          <svg width="120" height="120" viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="14" rx="2.5" fill="#fff" opacity=".95"/><path d="M7 9h7M7 12.5h10" stroke="#0565ff" stroke-width="1.6" stroke-linecap="round"/><circle cx="18.5" cy="18.5" r="4.5" fill="#4aa147"/><path d="m16.6 18.6 1.4 1.4 2.4-2.6" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+      </div>
+      <div class="card" data-reveal>
+        <div class="icon-tile air"><svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><path d="M12 5c-5 0-9 4.5-9 7s4 7 9 7 9-4.5 9-7-4-7-9-7Zm0 11a4 4 0 1 1 0-8 4 4 0 0 1 0 8Z"/></svg></div>
+        <h3>卡在誰那裡一目了然</h3>
+        <p>每張單流到哪、卡在誰，畫面看得清清楚楚，不用再一個個追著問。</p>
+      </div>
+      <div class="card" data-reveal>
+        <div class="icon-tile earth"><svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><path d="M5 4a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v18l-3-2-2 2-2-2-2 2-2-2-3 2Z"/><path d="M9 8h6M9 11.5h6" stroke="#faf4e3" stroke-width="1.5" stroke-linecap="round"/></svg></div>
+        <h3>拍張收據，報帳自動帶入</h3>
+        <p>金額、品項自動填進報帳單，不用手 key、不會算錯。</p>
+      </div>
+      <div class="card" data-reveal>
+        <div class="icon-tile space"><svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="2" width="12" height="20" rx="3"/><circle cx="12" cy="18" r="1.3" fill="#ededff"/></svg></div>
+        <h3>主管手機一鍵批</h3>
+        <p>該批的單主動提醒，隨時隨地批、不漏簽、不卡流程。</p>
+      </div>
+      <div class="card" data-reveal>
+        <div class="icon-tile turq"><svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2 3 6v6c0 5 3.8 8.5 9 10 5.2-1.5 9-5 9-10V6l-9-4Z"/><path d="m8.5 12 2.4 2.4L16 9.5" stroke="#dcfafc" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg></div>
+        <h3>送出前你說了算</h3>
+        <p>AI 只負責填好、提醒，最後送出一定由你親自按——不怕它亂送。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="scenes" style="background:var(--surface-muted)">
+  <div class="wrap">
+    <div class="sec-head" data-reveal>
+      <span class="overline">適用場景</span>
+      <h2>每天都在跑的單，<span class="accent-blue">全都包</span></h2>
+    </div>
+    <div class="trio">
+      <div class="scene" data-reveal>
+        <div class="scene-top"><svg width="64" height="64" viewBox="0 0 24 24" fill="none"><rect x="3" y="4.5" width="18" height="16" rx="2.5" fill="#0565ff"/><rect x="3" y="4.5" width="18" height="4.5" rx="2.5" fill="#053485"/><path d="M8 3v3M16 3v3" stroke="#80b6ff" stroke-width="2" stroke-linecap="round"/><path d="m9 14 2 2 4-4.5" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+        <div class="scene-body"><h3>請假</h3><p>說一句就送出假單，主管即時批、自動扣假別。</p></div>
+      </div>
+      <div class="scene" data-reveal>
+        <div class="scene-top"><svg width="64" height="64" viewBox="0 0 24 24" fill="none"><path d="M6 2h9l4 4v16a1 1 0 0 1-1.4.9L16 22l-2 1-2-1-2 1-2-1-1.6.9A1 1 0 0 1 5 22V3a1 1 0 0 1 1-1Z" fill="#4aa147"/><path d="M9 8h6M9 11.5h6M9 15h4" stroke="#e4fae3" stroke-width="1.6" stroke-linecap="round"/></svg></div>
+        <div class="scene-body"><h3>報帳請款</h3><p>拍收據自動抽金額，填好請款單直接送審。</p></div>
+      </div>
+      <div class="scene" data-reveal>
+        <div class="scene-top"><svg width="64" height="64" viewBox="0 0 24 24" fill="none"><path d="M3 4h2l2.2 11.5a2 2 0 0 0 2 1.6h7.5a2 2 0 0 0 2-1.6L21 8H6.5" stroke="#f58220" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/><circle cx="10" cy="20" r="1.6" fill="#f58220"/><circle cx="17" cy="20" r="1.6" fill="#f58220"/></svg></div>
+        <div class="scene-body"><h3>採購送件</h3><p>依需求自動填採購單、附簽呈，推進審批。</p></div>
+      </div>
+      <div class="scene" data-reveal>
+        <div class="scene-top"><svg width="64" height="64" viewBox="0 0 24 24" fill="none"><rect x="8" y="3" width="8" height="9" rx="2" fill="#5b57c2"/><rect x="5" y="12" width="14" height="3" rx="1.5" fill="#5b57c2"/><rect x="4" y="18" width="16" height="3" rx="1.5" fill="#a6a6f5"/></svg></div>
+        <div class="scene-body"><h3>用印申請</h3><p>填用印申請單、附文件，送核准一路到位。</p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="voice" style="background:var(--surface-muted)">
+  <div class="wrap">
+    <div class="sec-head" data-reveal><span class="overline">客戶怎麼說</span><h2>把時間還給生意</h2></div>
+    <div class="quote-wrap">
+      <div class="quote" data-reveal><p class="q">「以前請假報帳一堆紙本，現在員工講一句就送出，行政小姐輕鬆很多。」</p><div class="who"><span class="avatar">陳</span><div><b>陳經理</b><small>製造業 · 人資主管</small></div></div></div>
+      <div class="quote" data-reveal><p class="q">「單子卡在誰那裡一看就知道，不用再一直追，簽核快了一大半。」</p><div class="who"><span class="avatar">林</span><div><b>林協理</b><small>連鎖服務 · 營運</small></div></div></div>
+      <div class="quote" data-reveal><p class="q">「不用換我們現有的系統就能用，導入很快，老闆也敢放手讓 AI 幫忙。」</p><div class="who"><span class="avatar">王</span><div><b>王總</b><small>貿易公司 · 負責人</small></div></div></div>
+    </div>
+    <p class="ph">＊以上為情境示意見證，正式客戶見證待補</p>
+  </div>
+</section>
+
+<section id="cta" class="cta-band">
+  <div class="wrap" data-reveal>
+    <h2>把行政交給 AI，<span class="accent-blue">把時間還給團隊</span></h2>
+    <p>15 分鐘 Demo，看智慧經理當場幫你跑完一張請假單。</p>
+    <a href="mailto:hello@smartmanager.ai?subject=智慧經理 Demo 預約" class="btn btn-primary btn-lg">預約免費 Demo</a>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div class="foot-grid">
+      <div>
+        <a class="logo" href="#"><span class="mark"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M4 7h16M4 12h10M4 17h13" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/><circle cx="19" cy="14.5" r="3" fill="#fff"/></svg></span>智慧經理</a>
+        <p class="foot-tag">公司的 AI 行政經理——請假、報帳、採購、用印，講一句話就辦完。</p>
+      </div>
+      <div><h5>產品</h5><a href="#solutions">痛點解法</a><a href="#features">功能</a><a href="#scenes">適用場景</a></div>
+      <div><h5>公司</h5><a href="#">關於智慧經理</a><a href="#voice">客戶見證</a><a href="#cta">預約 Demo</a></div>
+      <div><h5>聯絡</h5><a href="mailto:hello@smartmanager.ai">hello@smartmanager.ai</a><a href="#cta">預約產品展示</a></div>
+    </div>
+    <div class="foot-bottom">
+      <span>© 2026 智慧經理 SmartManager</span>
+      <span>AI 行政流程自動化</span>
+    </div>
+  </div>
+</footer>
+
+<script>
+  const nav=document.getElementById('nav');
+  addEventListener('scroll',()=>nav.classList.toggle('scrolled',scrollY>10));
+  const io=new IntersectionObserver((es)=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target)}}),{threshold:.12});
+  document.querySelectorAll('[data-reveal]').forEach((el,i)=>{el.style.transitionDelay=(i%5*60)+'ms';io.observe(el)});
+
+  // ===== Solution demos (痛點 → 解法動畫) =====
+  const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+  let token=0;          // 切換時遞增，舊動畫偵測到即停
+  const alive=tk=>tk===token;
+
+  // 員工：對話自動填表
+  function chatUser(sc,html){const m=document.createElement('div');m.className='msg user';m.innerHTML='<div class="bubble">'+html+'</div>';sc.appendChild(m);sc.scrollTop=sc.scrollHeight;return m;}
+  function chatAi(sc,html){const m=document.createElement('div');m.className='msg ai';m.innerHTML='<div class="av"><svg width="19" height="19" viewBox="0 0 24 24" fill="none"><path d="M4 7h16M4 12h10M4 17h13" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/><circle cx="19" cy="14.5" r="3" fill="#fff"/></svg></div><div class="bubble">'+html+'</div>';sc.appendChild(m);sc.scrollTop=sc.scrollHeight;return m;}
+  function chatTyping(sc){const m=document.createElement('div');m.className='msg ai';m.innerHTML='<div class="av"><svg width="19" height="19" viewBox="0 0 24 24" fill="none"><path d="M4 7h16M4 12h10M4 17h13" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/><circle cx="19" cy="14.5" r="3" fill="#fff"/></svg></div><div class="bubble"><span class="typing"><span></span><span></span><span></span></span></div>';sc.appendChild(m);sc.scrollTop=sc.scrollHeight;return m;}
+  async function typeLv(el,text,tk){el.innerHTML='<span class="cur"></span>';let s='';for(const c of text){if(!alive(tk))return;s+=c;el.innerHTML=s+'<span class="cur"></span>';await sleep(55);}el.innerHTML=s+'<span class="tag">AI 自動帶入</span>';el.classList.add('done');}
+  async function playEmployee(tk){
+    const sc=document.getElementById('emp-chat');sc.innerHTML='';await sleep(300);if(!alive(tk))return;
+    chatUser(sc,'我想請下週三的特休 🌴');
+    await sleep(750);if(!alive(tk))return;let t=chatTyping(sc);await sleep(1100);if(!alive(tk))return;t.remove();
+    chatAi(sc,'沒問題，陳怡君！先幫你核對一下基本資料 👇');
+    await sleep(400);if(!alive(tk))return;
+    chatAi(sc,'<div class="c-card"><div class="cc-head">員工資料</div><div class="cc-body"><div class="cc-row"><span class="k">姓名</span><span class="v">陳怡君</span></div><div class="cc-row"><span class="k">部門</span><span class="v">業務部</span></div><div class="cc-row"><span class="k">員工編號</span><span class="v">A1023</span></div><div class="cc-row"><span class="k">職務代理人</span><span class="v">王大明</span></div><div class="cc-row"><span class="k">剩餘特休</span><span class="v">5 天</span></div></div></div>以上正確嗎？');
+    await sleep(800);if(!alive(tk))return;
+    const cu=document.createElement('div');cu.className='msg user';cu.innerHTML='<div class="confirm-btns"><span class="cbtn yes">✓ 正確</span><span class="cbtn">需修改</span></div>';sc.appendChild(cu);sc.scrollTop=sc.scrollHeight;
+    await sleep(1200);if(!alive(tk))return;cu.remove();chatUser(sc,'正確 ✓');
+    await sleep(700);if(!alive(tk))return;t=chatTyping(sc);await sleep(1100);if(!alive(tk))return;t.remove();
+    chatAi(sc,'好，幫你把<b>請假單</b>填好了，你核對一下 👇');
+    await sleep(400);if(!alive(tk))return;
+    const card=chatAi(sc,'<div class="lf-mini"><div class="lr"><span class="lk">申請人</span><span class="lv" id="ev1"></span></div><div class="lr"><span class="lk">假別</span><span class="lv" id="ev2"></span></div><div class="lr"><span class="lk">日期</span><span class="lv" id="ev3"></span></div><div class="lr"><span class="lk">天數</span><span class="lv" id="ev4"></span></div><div class="lr"><span class="lk">代理人</span><span class="lv" id="ev5"></span></div></div>');
+    await typeLv(card.querySelector('#ev1'),'陳怡君',tk);if(!alive(tk))return;
+    await typeLv(card.querySelector('#ev2'),'特休',tk);if(!alive(tk))return;
+    await typeLv(card.querySelector('#ev3'),'2026/06/11（三）',tk);if(!alive(tk))return;
+    await typeLv(card.querySelector('#ev4'),'1 天',tk);if(!alive(tk))return;
+    await typeLv(card.querySelector('#ev5'),'王大明',tk);if(!alive(tk))return;
+    await sleep(450);if(!alive(tk))return;t=chatTyping(sc);await sleep(1000);if(!alive(tk))return;t.remove();
+    chatAi(sc,'✋ 都幫你填好了！不過<b>送出要你親自按</b>——我不會替你送出，確認沒問題再按。','warn');
+    await sleep(1700);if(!alive(tk))return;chatUser(sc,'（已親自按下送出）');
+    await sleep(700);if(!alive(tk))return;t=chatTyping(sc);await sleep(900);if(!alive(tk))return;t.remove();
+    chatAi(sc,'收到！我幫你追到簽完 👇');
+    await sleep(400);if(!alive(tk))return;
+    const flow=chatAi(sc,'<div class="estep-flow"><div class="fstep" id="ef1"><div class="fdot"></div><span>提交</span></div><div class="fline" id="el1"></div><div class="fstep" id="ef2"><div class="fdot"></div><span>主管審核</span></div><div class="fline" id="el2"></div><div class="fstep" id="ef3"><div class="fdot"></div><span>完成</span></div></div>');
+    const ef1=flow.querySelector('#ef1'),ef2=flow.querySelector('#ef2'),ef3=flow.querySelector('#ef3'),el1=flow.querySelector('#el1'),el2=flow.querySelector('#el2');
+    await sleep(400);if(!alive(tk))return;ef1.classList.add('done');ef1.querySelector('.fdot').textContent='✓';sc.scrollTop=sc.scrollHeight;
+    await sleep(500);if(!alive(tk))return;el1.classList.add('fill');
+    await sleep(600);if(!alive(tk))return;ef2.classList.add('active');ef2.querySelector('.fdot').innerHTML='<span class="spin"></span>';
+    await sleep(1500);if(!alive(tk))return;ef2.classList.remove('active');ef2.classList.add('done');ef2.querySelector('.fdot').textContent='✓';
+    await sleep(300);if(!alive(tk))return;el2.classList.add('fill');
+    await sleep(600);if(!alive(tk))return;ef3.classList.add('done');ef3.querySelector('.fdot').textContent='✓';
+    await sleep(500);if(!alive(tk))return;t=chatTyping(sc);await sleep(900);if(!alive(tk))return;t.remove();
+    chatAi(sc,'✅ 簽核完成！特休已扣 1 天，<b>剩餘 4 天</b>。','ok');
+  }
+
+  // 主管：待簽一鍵批
+  async function playManager(tk){
+    const body=document.getElementById('mgr-body');const cnt=document.getElementById('mgr-cnt');
+    body.innerHTML='';cnt.textContent='(0)';await sleep(300);if(!alive(tk))return;
+    const items=[['陳怡君 · 特休 1 天','等待 2 天'],['林大文 · 報帳 $3,200','等待 1 天 · 附件齊全'],['王小美 · 採購單','等待 4 小時']];
+    const rows=[];
+    for(let i=0;i<items.length;i++){if(!alive(tk))return;
+      const r=document.createElement('div');r.className='urow';r.innerHTML='<div class="ut"><b>'+items[i][0]+'</b><small>'+items[i][1]+'</small></div><button class="mini-btn ok">批准</button><button class="mini-btn gho">退回</button>';
+      body.appendChild(r);rows.push(r);await sleep(60);r.classList.add('in');cnt.textContent='('+(i+1)+')';await sleep(450);}
+    await sleep(700);
+    for(let i=0;i<rows.length;i++){if(!alive(tk))return;
+      const btn=rows[i].querySelector('.mini-btn.ok');btn.textContent='✓ 已批';btn.style.background='var(--air-500)';
+      rows[i].classList.add('cleared');await sleep(350);rows[i].classList.add('fade');cnt.textContent='('+(rows.length-1-i)+')';await sleep(450);}
+    if(!alive(tk))return;
+    const done=document.createElement('div');done.className='uihint in';done.innerHTML='💡 <span>卡在你這的單<b>一目了然</b>，手機一鍵全批完——不用再被退件補件來回拖</span>';body.appendChild(done);
+  }
+
+  // HR：自助問答 + 統計
+  async function countUp(el,to,suffix,tk){const dur=900,steps=30;for(let i=1;i<=steps;i++){if(!alive(tk))return;el.innerHTML=Math.round(to*i/steps).toLocaleString()+(suffix||'');await sleep(dur/steps);}}
+  async function playHR(tk){
+    const body=document.getElementById('hr-body');body.innerHTML='';await sleep(300);if(!alive(tk))return;
+    body.innerHTML='<div class="stat-row"><div class="stat"><div class="n" id="hr1">0</div><div class="l">本月自動回覆</div></div><div class="stat"><div class="n" id="hr2">0</div><div class="l">不用轉人工</div></div><div class="stat"><div class="n" id="hr3">0</div><div class="l">省下工時</div></div></div><div id="hr-rows"></div>';
+    countUp(document.getElementById('hr1'),248,'',tk);countUp(document.getElementById('hr2'),92,'%',tk);countUp(document.getElementById('hr3'),12,' hr',tk);
+    await sleep(1000);if(!alive(tk))return;
+    const rows=document.getElementById('hr-rows');
+    const qa=[['員工問：特休怎麼算？','AI 依公司規定自動回覆'],['員工問：我的報帳到哪了？','AI 自動查進度回覆']];
+    for(const q of qa){if(!alive(tk))return;
+      const r=document.createElement('div');r.className='urow';r.innerHTML='<div class="ut"><b>'+q[0]+'</b><small>'+q[1]+'</small></div><span class="chip done">AI 已答</span>';
+      rows.appendChild(r);await sleep(60);r.classList.add('in');await sleep(700);}
+    if(!alive(tk))return;const h=document.createElement('div');h.className='uihint in';h.innerHTML='💡 <span>重複問題 AI 自動擋掉，<b>HR 不再被一直打斷</b></span>';body.appendChild(h);
+  }
+
+  // 老闆：儀表板 count-up + 進度條
+  async function playBoss(tk){
+    const body=document.getElementById('boss-body');body.innerHTML='';await sleep(300);if(!alive(tk))return;
+    body.innerHTML='<div class="stat-row"><div class="stat"><div class="n" id="b1">0</div><div class="l">本月處理單</div></div><div class="stat"><div class="n" id="b2">0</div><div class="l">平均簽核時間</div></div><div class="stat"><div class="n" id="b3">0</div><div class="l">人工把關比例</div></div></div>'+
+      '<div class="barrow"><span class="bl">業務部</span><span class="bt"><span class="bf" id="bb1"></span></span><span class="bv">78%</span></div>'+
+      '<div class="barrow"><span class="bl">工程部</span><span class="bt"><span class="bf" id="bb2"></span></span><span class="bv">54%</span></div>'+
+      '<div class="barrow"><span class="bl">行政部</span><span class="bt"><span class="bf" id="bb3"></span></span><span class="bv">95%</span></div>';
+    countUp(document.getElementById('b1'),1280,'',tk);
+    (async()=>{const e=document.getElementById('b2');for(let i=1;i<=20;i++){if(!alive(tk))return;e.innerHTML=(12-Math.round(8*i/20))+'<small>hr ↓65%</small>';await sleep(45);}})();
+    countUp(document.getElementById('b3'),8,'%',tk);
+    await sleep(400);if(!alive(tk))return;
+    document.getElementById('bb1').style.width='78%';document.getElementById('bb2').style.width='54%';document.getElementById('bb3').style.width='95%';
+    await sleep(1100);if(!alive(tk))return;
+    const h=document.createElement('div');h.className='uihint in';h.innerHTML='💡 <span>進度全透明、出事前先預警；<b>AI 只填不送，送出永遠人工把關</b>——放心交出去</span>';body.appendChild(h);
+  }
+
+  const players=[playEmployee,playManager,playHR,playBoss];
+  function switchSol(i){
+    token++;const tk=token;
+    document.querySelectorAll('.sol-item').forEach(b=>b.classList.toggle('active',b.dataset.sol==String(i)));
+    document.querySelectorAll('.sol-ui').forEach(u=>u.classList.toggle('show',u.dataset.ui==String(i)));
+    players[i](tk);
+  }
+  document.querySelectorAll('.sol-item').forEach(btn=>btn.addEventListener('click',()=>switchSol(+btn.dataset.sol)));
+  const rb=document.getElementById('replayBtn');if(rb)rb.addEventListener('click',()=>{const cur=document.querySelector('.sol-item.active');switchSol(cur?+cur.dataset.sol:0);});
+  const solEl=document.getElementById('solutions');
+  if(solEl){const sio=new IntersectionObserver((es)=>{es.forEach(e=>{if(e.isIntersecting){switchSol(0);sio.unobserve(e.target);}})},{threshold:.3});sio.observe(solEl);}
+</script>
+</body>
+</html>

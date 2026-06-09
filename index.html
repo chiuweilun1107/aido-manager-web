@@ -98,6 +98,8 @@
   .chip.done{background:var(--air-100);color:var(--air-600)}
   .chip.prog{background:var(--blue-100);color:var(--blue-600)}
   .chip.alert{background:#fdeae8;color:var(--caution)}
+  .urow.alert:not(.cleared){background:#fdeae8;border-color:var(--caution)}
+  .urow.alert:not(.cleared) .ut small{color:var(--caution);font-weight:600}
   .mini-btn{font-size:12.5px;font-weight:600;padding:6px 13px;border-radius:var(--pill);border:0;cursor:pointer}
   .mini-btn.ok{background:var(--blue-500);color:#fff}
   .mini-btn.gho{background:#fff;border:1px solid var(--border);color:var(--text-2)}
@@ -519,9 +521,9 @@
     await sleep(400);if(!alive(tk))return;
     const card=chatAi(sc,'<div class="c-card" style="max-width:340px"><div class="cc-head">待我簽核 (3)</div><div class="cc-body" id="mgr-list"></div></div>');
     const list=card.querySelector('#mgr-list');
-    const items=[['陳怡君 · 特休 1 天','等待 2 天'],['林大文 · 報帳 $3,200','附件齊全'],['王小美 · 採購單','等待 4 小時']];
+    const items=[['陳怡君 · 特休 1 天','等待 2 天'],['林大文 · 報帳 $3,200','附件齊全'],['王小美 · 採購單','金額超預算，待你確認','alert']];
     const rows=[];
-    for(const it of items){if(!alive(tk))return;const r=document.createElement('div');r.className='urow';r.style.marginBottom='8px';r.innerHTML='<div class="ut"><b>'+it[0]+'</b><small>'+it[1]+'</small></div><button class="mini-btn ok" data-ap>核准</button>';list.appendChild(r);await sleep(50);r.classList.add('in');sc.scrollTop=sc.scrollHeight;rows.push(r);await sleep(420);}
+    for(const it of items){if(!alive(tk))return;const isAlert=it[2]==='alert';const r=document.createElement('div');r.className='urow'+(isAlert?' alert':'');r.style.marginBottom='8px';r.innerHTML='<div class="ut"><b>'+it[0]+'</b><small>'+(isAlert?'⚠ ':'')+it[1]+'</small></div><button class="mini-btn ok" data-ap>核准</button>';list.appendChild(r);await sleep(50);r.classList.add('in');sc.scrollTop=sc.scrollHeight;rows.push(r);await sleep(420);}
     const forms=[
       {title:'請假申請單 · 陳怡君',rows:[['假別','特休'],['日期','2026/06/11（三）'],['天數','1 天'],['代理人','王大明'],['事由','個人事務']]},
       {title:'報帳請款單 · 林大文',rows:[['項目','客戶招待餐費'],['金額','$3,200'],['日期','2026/06/05'],['附件','發票 ×3'],['備註','已附統編']]},

@@ -552,6 +552,8 @@
     if(!alive(tk))return;chatUser(sc,'這 3 筆我來跟他們確認');
     await sleep(500);if(!alive(tk))return;t=chatTyping(sc);await sleep(1000);if(!alive(tk))return;t.remove();
     chatAi(sc,'好。其餘 323 筆已核對無誤、可直接匯出薪資系統；要你裁量的我都標出來了。');
+    await sleep(500);if(!alive(tk))return;
+    chatAi(sc,'<div class="c-card" style="max-width:360px"><div class="cc-head">要你裁量的 3 筆</div><div class="cc-body"><div class="urow in" style="opacity:1;transform:none"><div class="ut"><b>林大文・報帳 $3,200</b><small>發票缺統編，無法入帳</small></div><span class="chip alert">待補件</span></div><div class="urow in" style="opacity:1;transform:none"><div class="ut"><b>陳怡君・加班 4 hr</b><small>時數與打卡紀錄對不上</small></div><span class="chip wait">待確認</span></div><div class="urow in" style="opacity:1;transform:none;margin-bottom:0"><div class="ut"><b>王小美・特休 1 天</b><small>6 月特休已超額 0.5 天</small></div><span class="chip alert">請假異常</span></div></div></div>');
   }
 
   // 老闆：儀表板 count-up + 進度條

@@ -1,22 +1,6 @@
 'use client'
 import { useState, FormEvent } from 'react'
-import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
-
-const DEMO_ACCOUNTS = [
-  { label: '員工 - 陳志明', email: 'chen.zhiming@aido.demo', pwd: 'Aido@2026!' },
-  { label: '主管 - 林美華', email: 'lin.meihua@aido.demo', pwd: 'Aido@2026!' },
-  { label: 'HR - 張惠芳', email: 'zhang.huifang@aido.demo', pwd: 'Aido@2026!' },
-  { label: 'IT - 黃建宏', email: 'huang.jianhong@aido.demo', pwd: 'Aido@2026!' },
-  { label: '財務 - 劉芳儀', email: 'liu.fangyi@aido.demo', pwd: 'Aido@2026!' },
-  { label: '經營者 - 王大明', email: 'wang.daming@aido.demo', pwd: 'Aido@2026!' },
-  { label: '行政 - 吳秀蘭', email: 'wu.xiulan@aido.demo', pwd: 'Aido@2026!' },
-  { label: '法務 - 趙文傑', email: 'zhao.wenjie@aido.demo', pwd: 'Aido@2026!' },
-  { label: '稽核 - 楊淑芬', email: 'yang.shufen@aido.demo', pwd: 'Aido@2026!' },
-  { label: '員工2 - 許建國', email: 'xu.jianguo@aido.demo', pwd: 'Aido@2026!' },
-  { label: '員工3 - 鄭淑娟', email: 'zheng.shujuan@aido.demo', pwd: 'Aido@2026!' },
-  { label: '主管2 - 蔡明哲', email: 'cai.mingzhe@aido.demo', pwd: 'Aido@2026!' },
-]
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -24,16 +8,36 @@ export default function LoginPage() {
   const [err, setErr] = useState('')
   const [loading, setLoading] = useState(false)
   const router = useRouter()
-  const supabase = createClient()
+
+  const DEMO_ACCOUNTS = [
+    { label: '員工 - 陳志明', email: 'chen.zhiming@aido.demo', pwd: 'Aido@2026!' },
+    { label: '主管 - 林美華', email: 'lin.meihua@aido.demo', pwd: 'Aido@2026!' },
+    { label: 'HR - 張惠芳', email: 'zhang.huifang@aido.demo', pwd: 'Aido@2026!' },
+    { label: 'IT - 黃建宏', email: 'huang.jianhong@aido.demo', pwd: 'Aido@2026!' },
+    { label: '財務 - 劉芳儀', email: 'liu.fangyi@aido.demo', pwd: 'Aido@2026!' },
+    { label: '經營者 - 王大明', email: 'wang.daming@aido.demo', pwd: 'Aido@2026!' },
+    { label: '行政 - 吳秀蘭', email: 'wu.xiulan@aido.demo', pwd: 'Aido@2026!' },
+    { label: '法務 - 趙文傑', email: 'zhao.wenjie@aido.demo', pwd: 'Aido@2026!' },
+    { label: '稽核 - 楊淑芬', email: 'yang.shufen@aido.demo', pwd: 'Aido@2026!' },
+    { label: '員工2 - 許建國', email: 'xu.jianguo@aido.demo', pwd: 'Aido@2026!' },
+    { label: '員工3 - 鄭淑娟', email: 'zheng.shujuan@aido.demo', pwd: 'Aido@2026!' },
+    { label: '主管2 - 蔡明哲', email: 'cai.mingzhe@aido.demo', pwd: 'Aido@2026!' },
+  ]
 
   async function handleLogin(e: FormEvent) {
     e.preventDefault()
-    setErr(''); setLoading(true)
-    const { error } = await supabase.auth.signInWithPassword({ email, password: pwd })
-    setLoading(false)
-    if (error) { setErr(error.message); return }
-    router.push('/dashboard')
-    router.refresh()
+    setErr('')
+    setLoading(true)
+    try {
+      const { createClient } = await import('@/lib/supabase/client')
+      const supabase = createClient()
+      const { error } = await supabase.auth.signInWithPassword({ email, password: pwd })
+      if (error) { setErr(error.message); return }
+      router.push('/dashboard')
+      router.refresh()
+    } finally {
+      setLoading(false)
+    }
   }
 
   function fillDemo(acc: typeof DEMO_ACCOUNTS[0]) {

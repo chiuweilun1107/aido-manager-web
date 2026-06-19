@@ -9,6 +9,16 @@ export function middleware(request: NextRequest) {
     return NextResponse.next()
   }
 
+  // Pre-auth cookie shortcut: if the lightweight pre-auth signal cookie is present,
+  // skip the entire Supabase URL parse + cookie extraction + JWT decode block.
+  // The `pa=1` cookie is set below after a successful JWT verification (Max-Age=300).
+  if (request.cookies.get('pa')?.value === '1') {
+    const response = NextResponse.next()
+    // Refresh CDN-layer pre-auth signal header on each authenticated pass-through
+    response.headers.set('X-Pre-Auth', '1')
+    return response
+  }
+
   // Early exit for public routes — skip all expensive work (cookie extraction, Supabase URL parse, JWT decode)
   if (pathname.startsWith('/login') || pathname.startsWith('/api')) {
     return NextResponse.next()
@@ -37,9 +47,26 @@ export function middleware(request: NextRequest) {
   }
 
   if (!authenticated) {
+    // Accept: text/html detection — only redirect browser navigations; return 401 JSON for programmatic/API callers
+    const acceptHeader = request.headers.get('accept') ?? ''
+    if (!acceptHeader.includes('text/html')) {
+      return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+    }
     return NextResponse.redirect(new URL('/login', request.url))
   }
-  return NextResponse.next()
+
+  // Authenticated: proceed and set the short-lived pre-auth cookie shortcut + CDN signal header.
+  const response = NextResponse.next()
+  // Set pre-auth cookie so subsequent requests skip full JWT decode (Max-Age=300s)
+  response.cookies.set('pa', '1', {
+    path: '/',
+    maxAge: 300,
+    httpOnly: true,
+    sameSite: 'lax',
+  })
+  // CDN-layer pre-auth signal header: a CDN edge rule can cache this and skip middleware on repeat visits
+  response.headers.set('X-Pre-Auth', '1')
+  return response
 }
 
 export const config = {

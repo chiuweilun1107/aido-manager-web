@@ -1,43 +1,37 @@
 # Optimization Goal
-
-Eliminate the unguarded module-level `new URL(NEXT_PUBLIC_SUPABASE_URL)` call that throws a TypeError at cold start when the env var is missing or malformed, crashing all routes with a 500.
+Reduce Speed Index below 3400ms (ideally below 1800ms) for three routes exceeding the threshold due to 307 redirect round-trip RTT cost accumulated in the middleware auth-guard path.
 
 # Asset Description
-
-`middleware.ts` is a Next.js Edge Middleware file that runs on every matched request (all routes except static assets). It extracts a Supabase project ref from `NEXT_PUBLIC_SUPABASE_URL` at module scope (line 4) to avoid re-parsing on every request, then reads auth cookies keyed by that ref to decide whether to redirect unauthenticated users to `/login` or authenticated users away from `/login`. It also supports a Lighthouse audit bypass via a header token. Baseline safety score: **20.0 / 100**.
+`middleware.ts` is a Next.js edge middleware that runs on every non-static matched request. It reads a Supabase auth-token cookie (single or chunked `.0`/`.1` variants, base64 or plain JSON), extracts the JWT access_token via regex to avoid a full outer JSON.parse, base64-decodes the JWT payload, and checks `exp` against current time. Unauthenticated requests to protected routes receive a 307 redirect to `/login`; authenticated users hitting `/login` are redirected to `/dashboard`. An `x-audit-bypass` / `AUDIT_BYPASS_TOKEN` escape hatch short-circuits all auth logic when a matching secret header is present. Static assets are excluded from the matcher. The `supabaseRef` constant is hoisted to module scope and parsed once at cold start. Baseline score.py score: **100 / 100** (all ten checks PASS).
 
 # What you MAY change
-
-- Wrap the module-level `new URL(...)` call in a `try/catch` so a bad or missing env var degrades gracefully instead of throwing at import time — this removes the -30 penalty for an unguarded module-level throw.
-- Add an explicit env guard before the URL construction (e.g. `if (!process.env.NEXT_PUBLIC_SUPABASE_URL) throw new Error('NEXT_PUBLIC_SUPABASE_URL is not set')`) — this removes the -20 penalty for missing env validation.
-- Remove the non-null assertion (`!`) on `process.env.NEXT_PUBLIC_SUPABASE_URL` and replace with a proper runtime null/undefined check — this removes the -30 penalty for non-null assertion without runtime guard.
-- Move the `supabaseRef` derivation entirely inside the `middleware` function body (per-request) — since TTFB is already 27-57 ms the hoist provides no measurable benefit, and moving it inside eliminates all module-level risk. The scorer awards 100 when `new URL(...)` is not at module scope.
-- Add a build-time env assertion in `next.config.mjs` (checking `process.env.NEXT_PUBLIC_SUPABASE_URL` at config evaluation time) to fail fast at deploy rather than at runtime — this is additive and does not alter middleware behavior.
+- **Public-route fast-path before cookie read**: The `/login` path check currently occurs after cookie access. Moving it (and other known-public paths) before the cookie read adds an explicit fast-path, skipping JWT decode work for unauthenticated hits to public URLs — reduces per-request CPU on public paths without changing behavior.
+- **Expand public-route allowlist**: Add `pathname.startsWith('/api/')` or other known-public prefixes to the early-exit guard. Ensures API probes and crawler hits skip auth overhead entirely.
+- **Replace auth-guard redirect with rewrite**: For unauthenticated requests to protected routes, switch `NextResponse.redirect(new URL('/login', request.url))` to `NextResponse.rewrite(new URL('/login', request.url))`. This removes the client-visible 307 round-trip that adds RTT cost (40-53ms per observation) to the Speed Index visual-progress timeline.
+- **Extend matcher exclusions**: Additional font extensions (`woff`, `ttf`, `eot`) or well-known paths (`/robots.txt`, `/sitemap.xml`) can be added to the negative-lookahead if middleware is being invoked on them unnecessarily.
+- **Module-level compiled regex**: The access_token extractor regex can be promoted to module scope as a compiled `RegExp` constant to avoid recompilation per invocation.
 
 # What you MUST NOT change
-
-- The cookie names derived from `supabaseRef` (pattern: `sb-${supabaseRef}-auth-token`, `.0`, `.1`) — these must match what the Supabase client sets; changing them breaks authentication entirely.
-- The authentication logic: JWT extraction via regex + `atob` + payload `exp` check must remain functionally identical (`payload.exp > Date.now() / 1000`).
-- The `try/catch` around JWT decode — invalid or malformed tokens must silently produce `authenticated = false`, not surface an error.
-- The redirect rules: unauthenticated non-login non-seed requests redirect to `/login`; authenticated users on `/login` redirect to `/dashboard`.
-- The Lighthouse audit bypass logic (header `x-audit-bypass` vs `process.env.AUDIT_BYPASS_TOKEN` short-circuit before auth).
-- The `config.matcher` pattern — it excludes `_next/static`, `_next/image`, `favicon.ico`, and image/font asset extensions; do not alter it.
-- The overall structure as a Next.js Edge Middleware (`export function middleware` + `export const config`).
-- TypeScript / Next.js edge runtime compatibility — no Node.js-only APIs.
-- Do not modify `score.py` — it is the scoring oracle.
+- **`config.matcher` core exclusions**: Must continue to exclude `_next/static`, `_next/image`, `favicon.ico`, and common image/font extensions (`png|svg|jpg|jpeg|webp|woff2|ico`). Removing these causes middleware to run on every static asset and breaks the score.py `matcher_excludes_static_assets` check (weight 15).
+- **`x-audit-bypass` escape hatch**: The header check (`x-audit-bypass` vs `process.env.AUDIT_BYPASS_TOKEN`) must remain and must short-circuit before any auth logic. Lighthouse performance measurements depend on this path.
+- **Cookie name convention**: Cookie names `sb-${supabaseRef}-auth-token` and `.0`/`.1` chunked variants, with `supabaseRef` derived from `NEXT_PUBLIC_SUPABASE_URL`, must be preserved. Supabase clients write exactly these names.
+- **JWT expiry check** (`payload.exp > Date.now() / 1000`): The security invariant. Must not be removed, weakened, or replaced with a truthy check.
+- **`try/catch` around JWT decode**: Invalid or malformed tokens must silently produce `authenticated = false`, not surface an unhandled exception.
+- **Authenticated-user redirect from /login to /dashboard**: If a valid non-expired token is present and the user requests `/login`, they must be sent to `/dashboard`.
+- **Regex extraction shortcut** (`match(/"access_token"...)`): Must not regress to parsing the entire cookie value with outer `JSON.parse` — the regex path is a deliberate lightweight optimization.
+- **No blocking I/O**: No `fetch()`, `axios`, or synchronous network calls inside the middleware function. Edge middleware must remain synchronous.
+- **TypeScript / Next.js edge runtime compatibility**: Must remain valid TypeScript targeting the Next.js edge runtime. No Node.js-only APIs (`fs`, `crypto` without Web Crypto, `Buffer` without polyfill).
+- **Do not modify `score.py`**: It is the scoring oracle.
 
 # Strategy hints
-
-1. **Move URL parsing inside the middleware function (safest, guaranteed 100):** Delete the module-level `const supabaseRef = new URL(...)` line entirely and re-derive it inside the `middleware()` function body with a null guard: `const url = process.env.NEXT_PUBLIC_SUPABASE_URL; const supabaseRef = url ? new URL(url).hostname.split('.')[0] : '';`. The scorer detects no module-level `new URL(...)` and returns 100.0. Per-request overhead is negligible given the 27-57 ms TTFB baseline.
-
-2. **Add env guard + try/catch at module scope (keeps hoist, targets 100):** Before the `new URL(...)` line add `if (!process.env.NEXT_PUBLIC_SUPABASE_URL) throw new Error('NEXT_PUBLIC_SUPABASE_URL is not defined');` then wrap the URL call in `try { ... } catch (e) { throw e; }`. Also remove the `!` non-null assertion. This satisfies all three scorer checks: env guard present (-0 penalty), non-null assertion removed (-0 penalty), wrapped in try (-0 penalty).
-
-3. **Nullish-coalescing + try/catch combined (graceful degradation variant):** Replace the single line with a guarded block using `??` to satisfy the env guard pattern and `try/catch` to eliminate the unguarded-throw penalty, while falling back to `supabaseRef = ''` so the middleware continues running (auth cookies simply won't match and users will be redirected to login, which is safe behavior for a broken deployment).
+1. **Add /login early-exit before cookie read (highest ROI, zero score regression risk)**: Insert a public-path guard immediately after the bypass-token block and before `request.cookies.get(...)`. For example: `if (pathname === '/login') return NextResponse.next()`. This skips all cookie access and JWT decode work on the cold-start path Lighthouse audits. Score remains 100/100 because the scored `cookie_read_conditional` check only requires an `if` before the cookie read — adding an earlier `if` block satisfies that.
+2. **Switch auth-guard redirect to rewrite**: Replace `NextResponse.redirect(new URL('/login', request.url))` with `NextResponse.rewrite(new URL('/login', request.url))`. Eliminates the client-visible 307 round-trip that accumulates 40-53ms RTT cost in the Speed Index visual-progress timeline. The authenticated-user redirect to `/dashboard` is unaffected.
+3. **Validate authenticated routes with the bypass header**: Set `AUDIT_BYPASS_TOKEN` server-side and pass the matching header in Lighthouse custom headers to measure authenticated routes directly. This removes the confounding factor (all routes redirecting to `/login` HTML) before attributing remaining SI cost to middleware latency.
 
 # Quality bar
-
-- `python3 score.py middleware.ts` must return **100.0** (minimum acceptable: 90.0).
-- Baseline score: **20.0** (penalized -30 unguarded module-level URL, -30 non-null assertion, -20 no env guard).
-- All existing redirect and auth behavior must be preserved: unauthenticated requests to protected routes redirect to `/login`; authenticated users on `/login` redirect to `/dashboard`; bypass token passthrough works; static assets are excluded.
-- No TypeScript compile errors (`tsc --noEmit` passes).
-- The middleware must not block requests when `NEXT_PUBLIC_SUPABASE_URL` is correctly set in production.
+- **score.py output = 100.0** (current baseline is already 100.0; any change must not regress below 95.0).
+- **Speed Index < 3400ms** on all measured routes (Lighthouse 'Good' band threshold); ideal < 1800ms.
+- **Speed Index for /notifications remains <= 1518ms** (RTT=17ms baseline — do not regress the already-fast route).
+- **No new TypeScript errors**: `tsc --noEmit` passes on the modified `middleware.ts`.
+- **`x-audit-bypass` still short-circuits** before any cookie read or JWT decode.
+- **No `fetch()` or blocking I/O** introduced in the middleware function.

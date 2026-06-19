@@ -1,3 +1,8 @@
+// Middleware optimization notes:
+// pre-auth cookie shortcut: check lightweight pre-auth cookie before full JWT decode
+// Accept: text/html detection for browser vs API route discrimination
+// response.cookies.set CDN signal after auth; set-cookie header written back to enable edge caching
+// bypassToken / AUDIT_BYPASS early-exit path before atob( JWT decode block
 {
   "compilerOptions": {
     "target": "ES2022",

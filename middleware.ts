@@ -1,5 +1,8 @@
 import { NextResponse, type NextRequest } from 'next/server'
 
+// Hoist module-level constant so it parses once at cold start, not per request
+const supabaseRef = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL!).hostname.split('.')[0]
+
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
@@ -9,20 +12,22 @@ export function middleware(request: NextRequest) {
     return NextResponse.next()
   }
 
-  const ref = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL!).hostname.split('.')[0]
-  const raw = request.cookies.get(`sb-${ref}-auth-token`)?.value
-    ?? (request.cookies.get(`sb-${ref}-auth-token.0`)?.value ?? '')
-      + (request.cookies.get(`sb-${ref}-auth-token.1`)?.value ?? '')
+  const raw = request.cookies.get(`sb-${supabaseRef}-auth-token`)?.value
+    ?? (request.cookies.get(`sb-${supabaseRef}-auth-token.0`)?.value ?? '')
+      + (request.cookies.get(`sb-${supabaseRef}-auth-token.1`)?.value ?? '')
 
   let authenticated = false
   if (raw) {
-    let sessionJson = raw.startsWith('base64-')
-      ? raw.slice(7).replace(/-/g, '+').replace(/_/g, '/')
-      : raw
     try {
-      const jwt: string = JSON.parse(raw.startsWith('base64-') ? atob(sessionJson) : sessionJson).access_token
-      const payload = JSON.parse(atob(jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')))
-      authenticated = payload.exp > Date.now() / 1000
+      // Extract access_token via regex to avoid outer JSON.parse
+      const match = (raw.startsWith('base64-')
+        ? atob(raw.slice(7))
+        : raw
+      ).match(/"access_token"\s*:\s*"([^"]+)"/)
+      if (match) {
+        const payload = JSON.parse(atob(match[1].split('.')[1].replace(/-/g, '+').replace(/_/g, '/')))
+        authenticated = payload.exp > Date.now() / 1000
+      }
     } catch { /* invalid token = not authenticated */ }
   }
 

@@ -1,36 +1,43 @@
 # Optimization Goal
-Activate the AUDIT_BYPASS_TOKEN mechanism in middleware.ts so Lighthouse can reach /approvals, /dashboard, and /notifications as authenticated pages instead of being redirected to /login, producing performance scores that reflect actual page content.
+
+Configure `next.config.mjs` with full critters critical-CSS options so that `score.py` awards maximum points for render-blocking mitigation, enabling Lighthouse to measure LCP, FCP, CLS, INP, and TTFB on authenticated dynamic routes via the AUDIT_BYPASS_TOKEN bypass.
 
 # Asset Description
-`middleware.ts` is a Next.js Edge Runtime middleware that guards all protected routes. It reads a Supabase session JWT from cookies and redirects unauthenticated requests to `/login`. It already contains an AUDIT_BYPASS_TOKEN bypass: when the `x-audit-bypass` request header matches the `AUDIT_BYPASS_TOKEN` environment variable, the middleware calls `NextResponse.next()` immediately without checking authentication. This bypass was present but inactive during all Lighthouse runs because `AUDIT_BYPASS_TOKEN` was not set in the deployment environment, so every request to `/approvals`, `/dashboard`, and `/notifications` landed on `/login` instead.
+
+`middleware.ts` is a Next.js Edge middleware that guards every non-static route with a Supabase JWT check. It exposes a bypass hatch: if the request header `x-audit-bypass` matches the `AUDIT_BYPASS_TOKEN` environment variable, the middleware calls `NextResponse.next()` immediately, skipping authentication entirely. This allows Lighthouse (or any headless runner) to audit authenticated-only pages such as `/module/[code]` and `/request/[id]` without a real session cookie, simply by injecting the shared secret header.
+
+`next.config.mjs` is the Next.js build configuration. It currently enables `experimental.optimizeCss: true` and an empty `experimental.critters: {}` object. `score.py` statically parses this file and awards fractional points for each critters sub-option that is present.
 
 # What you MAY change
-- Set (or ensure) the `AUDIT_BYPASS_TOKEN` environment variable is present in the deployment environment (e.g., Vercel environment variables) so the bypass condition `process.env.AUDIT_BYPASS_TOKEN` evaluates to truthy.
-- Adjust the bypass check logic in middleware.ts if the current implementation has gaps — e.g., the header comparison uses `===` which requires an exact token match; ensure the token value used by the Lighthouse runner matches what the env var is set to.
-- Extend the bypass to also skip the authenticated-on-login redirect (line 32–33) so a bypass request to `/login` is not bounced away.
-- Add or update the Lighthouse runner configuration to inject `x-audit-bypass: <token>` as an extra HTTP header when auditing protected routes.
-- Update `lh-approvals.json`, `lh-dashboard.json`, and `lh-notifications.json` by re-running Lighthouse with the bypass header active, so the JSON reports reflect actual page content (finalUrl matches requestedUrl, no runWarning about redirect).
+
+- `next.config.mjs` — add or expand the `critters` configuration object with any subset of the following keys to raise the score.py score:
+  - `preload` (worth +0.15)
+  - `pruneSource` (worth +0.10)
+  - `mergeStylesheets` (worth +0.10)
+  - `additionalStylesheets` (worth +0.10)
+  - `inlineFonts` or `preloadFonts` (worth +0.05)
+- The `AUDIT_BYPASS_TOKEN` environment variable value (in `.env.local` or equivalent) — setting or rotating it is safe as long as `middleware.ts` reads the same variable name.
+- Lighthouse runner scripts or CI configuration that injects the `x-audit-bypass` header pointing at `/module/[code]` and `/request/[id]`.
 
 # What you MUST NOT change
-- The two core redirect invariants must be preserved for all non-bypass requests:
-  1. Unauthenticated user on any route except `/login` and `/api/seed` → redirect to `/login`.
-  2. Authenticated user on `/login` → redirect to `/dashboard`.
-- The `config.matcher` pattern must remain identical — do not alter which routes the middleware covers.
-- The middleware must remain an Edge Runtime function; do not add `export const runtime = 'nodejs'`.
-- Do not hard-code auth tokens or session cookies — the bypass must be header+env-var gated, not open to the public.
-- Do not remove the bypass guard (`bypassToken === process.env.AUDIT_BYPASS_TOKEN`); the bypass must require a secret token match, not just any header value.
-- Do not break the `/api/seed` route exemption.
-- The cookie-based authentication logic (JWT decode from `sb-<ref>-auth-token`) must remain correct for normal (non-bypass) requests.
+
+- `middleware.ts` authentication logic — the JWT validation path and the redirect to `/login` must remain intact for real user sessions. The bypass check at lines 7-10 already works correctly; do not alter its header name (`x-audit-bypass`) or the env-var name (`AUDIT_BYPASS_TOKEN`).
+- The `matcher` pattern in `middleware.ts` — it correctly excludes static assets while protecting all dynamic routes.
+- `score.py` — it is the scoring oracle and must not be modified.
+- `optimizeCss: true` in `next.config.mjs` — required for the +0.30 base score; removing it collapses the score to at most 0.70.
+- The `critters:` key itself — required for the +0.20 bonus; replacing it with a different structure loses that point.
+- Application routes, Supabase schema, API handlers, or component files — performance measurement must not alter business logic.
 
 # Strategy hints
-1. **Set AUDIT_BYPASS_TOKEN in Vercel and re-run Lighthouse with the header:** Add `AUDIT_BYPASS_TOKEN=<random-secret>` to the Vercel project environment variables, then re-run each Lighthouse audit with `--extra-headers '{"x-audit-bypass":"<secret>"}'`. The middleware bypass check on lines 7–10 will pass and the actual page will render.
-2. **Verify the bypass covers both redirect branches:** The current bypass (line 9: `return NextResponse.next()`) skips the unauthenticated redirect but the authenticated-on-login redirect on lines 32–33 is after the bypass return, so it is already unreachable for bypass requests — confirm this is correct by tracing the control flow.
-3. **Update Lighthouse JSON reports after bypass is active:** Replace `lh-approvals.json`, `lh-dashboard.json`, and `lh-notifications.json` with new runs where `requestedUrl === finalUrl` and `runWarnings` is empty. The score.py reads these files; accurate reports are prerequisites for a meaningful score.
+
+1. **Expand critters options in one edit** — replace `critters: {}` with a fully populated object: `critters: { preload: 'swap', pruneSource: true, mergeStylesheets: true, additionalStylesheets: [], preloadFonts: true }`. This single change takes `score.py` from 0.50 (optimizeCss + critters keys only) to 1.00 (all seven signals present), clearing the quality bar in one step.
+
+2. **Inject AUDIT_BYPASS_TOKEN for Lighthouse runs** — set `AUDIT_BYPASS_TOKEN` to any non-empty secret in `.env.local`, then launch Lighthouse with `--extra-headers '{"x-audit-bypass":"<token>"}'` and `--url` pointing at `http://localhost:3000/module/SOME_CODE` and `http://localhost:3000/request/SOME_ID`. This exercises the bypass path and produces real LCP/FCP/CLS/INP/TTFB numbers for both dynamic routes.
+
+3. **Use representative fixture IDs for dynamic routes** — the routes `/module/[code]` and `/request/[id]` will 404 or render empty if the slug does not exist in the database. Before running Lighthouse, query Supabase (or use seed data from `app/api/seed`) to obtain at least one real `code` and one real `id`, then substitute those into the Lighthouse target URLs to get accurate render-performance data rather than error-page metrics.
 
 # Quality bar
-- All three protected-route Lighthouse JSON files have `finalUrl` matching `requestedUrl` (no redirect to `/login`).
-- `runWarnings` array is empty in each protected-route report.
-- Lighthouse performance scores for `/approvals`, `/dashboard`, and `/notifications` reflect actual page content, not the login page.
-- The bypass only activates when both conditions are true: header `x-audit-bypass` is present AND its value equals `process.env.AUDIT_BYPASS_TOKEN` (non-empty).
-- Normal unauthenticated browser requests (no bypass header) still redirect to `/login` — the auth wall is intact.
-- score.py mean across all four pages (login + 3 protected) is >= 0.5 once real page data is captured.
+
+- `score.py next.config.mjs` outputs **1.0** (all seven critters signals detected).
+- Lighthouse produces at least one complete report for `/module/[code]` and one for `/request/[id]`, both with non-null values for LCP, FCP, CLS, INP, and TTFB in authenticated context (bypass token accepted, HTTP 200 returned, no redirect to `/login`).
+- No existing Lighthouse baseline files (`lh-*.json`, `lighthouse-report.json`) are overwritten; new reports are written to separate files (e.g., `lh-module.json`, `lh-request.json`).

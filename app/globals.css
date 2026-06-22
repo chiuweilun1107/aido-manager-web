@@ -59,6 +59,14 @@
   -ms-overflow-style: none;
 }
 *::-webkit-scrollbar { display: none; }
+
+/* 可左右滑動的區塊 (KPI/表格): 局部顯示細捲軸當操作提示 (覆寫上面全域隱藏)。
+   桌面: 可拖捲軸 / trackpad 雙指橫滑 / Shift+滾輪 */
+.scroll-x { overflow-x: auto; scrollbar-width: thin !important; scrollbar-color: var(--border-strong) transparent; }
+.scroll-x::-webkit-scrollbar { display: block !important; height: 9px; }
+.scroll-x::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 5px; border: 2px solid var(--bg); }
+.scroll-x::-webkit-scrollbar-thumb:hover { background: var(--text-faint); }
+.scroll-x::-webkit-scrollbar-track { background: transparent; }
 body {
   background: var(--bg);
   color: var(--text);

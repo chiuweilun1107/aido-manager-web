@@ -115,7 +115,7 @@ body {
 /* KPI 任何寬度都可左右滑動 (非僅手機): DashboardView inline 用
    repeat(6, minmax(150px,1fr)) + overflowX auto — 視窗夠寬 6 欄 fit，
    窄則每格守 150px 超出可滑 (桌面/平板/手機皆然) */
-.rwd-kpi { -webkit-overflow-scrolling: touch; scrollbar-width: thin; }
+.rwd-kpi { -webkit-overflow-scrolling: touch; }
 
 /* ============ 手機 sidebar drawer ============ */
 .mobile-menu-btn { display: none; }

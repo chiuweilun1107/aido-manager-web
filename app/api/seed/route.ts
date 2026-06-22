@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
 
   // 1. Seed roles
   const ROLES = [
-    { code: 'employee', name: '員工', dashboard_route: '/dashboard', level: 1 },
+    { code: 'employee', name: '一般職員', dashboard_route: '/dashboard', level: 1 },
     { code: 'manager', name: '主管', dashboard_route: '/dashboard', level: 2 },
     { code: 'hr', name: 'HR 人資', dashboard_route: '/dashboard', level: 3 },
     { code: 'it', name: 'IT 資訊', dashboard_route: '/dashboard', level: 2 },

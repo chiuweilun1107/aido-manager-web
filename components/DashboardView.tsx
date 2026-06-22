@@ -218,7 +218,8 @@ export default function DashboardView({ user, shortcuts }: { user: SessionUser; 
   }
 
   const visibleBlocks = BLOCKS.filter(effVisible)
-  const hiddenBlocks = BLOCKS.filter(b => !effVisible(b))
+  // 只列「角色本可見但被用戶隱藏」的；角色本就不該見的(如一般職員的 analytics)不出現在恢復清單
+  const hiddenBlocks = BLOCKS.filter(b => roleVisible(b, user.roleCode) && !effVisible(b))
 
   return (
     <>

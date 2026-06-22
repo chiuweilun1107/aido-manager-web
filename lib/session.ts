@@ -22,7 +22,7 @@ export async function getSessionUser(): Promise<SessionUser> {
     email: aiDoUser.email,
     displayName: aiDoUser.display_name,
     roleCode: aiDoUser.roles?.code ?? 'employee',
-    roleName: aiDoUser.roles?.name ?? '員工',
+    roleName: aiDoUser.roles?.name ?? '一般職員',
     departmentId: aiDoUser.department_id,
     departmentName: aiDoUser.departments?.name ?? null,
     managerId: aiDoUser.manager_user_id,

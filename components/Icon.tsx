@@ -53,6 +53,7 @@ export default function Icon({ name, className = '', size = 18 }: IconProps) {
       height={size}
       className={className}
       aria-hidden="true"
+      style={{ overflow: 'visible' }}
     >
       <path strokeLinecap="round" strokeLinejoin="round" d={d} />
     </svg>

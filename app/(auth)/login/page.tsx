@@ -60,26 +60,15 @@ export default function LoginPage() {
       <div style={{ width: '100%', maxWidth: '400px' }}>
         {/* Logo block */}
         <div style={{ textAlign: 'center', marginBottom: '32px' }}>
-          <div style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            width: '36px', height: '36px',
-            borderRadius: 'var(--radius)',
-            background: 'var(--primary)',
-            marginBottom: '12px',
-          }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="9 11 12 14 22 4" />
-              <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
-            </svg>
-          </div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/brand/aido-app-icon.png" alt="AiDo 智行" width={60} height={60}
+            style={{ borderRadius: '14px', marginBottom: '14px', display: 'inline-block' }} />
           <h1 style={{
-            fontSize: '22px', fontWeight: 500, color: 'var(--text)',
+            fontSize: '22px', fontWeight: 600, color: 'var(--text)',
             letterSpacing: '-0.03em', lineHeight: 1.2, margin: 0,
-          }}>AiDo Manager</h1>
+          }}>AiDo 智行</h1>
           <p style={{ color: 'var(--text-faint)', fontSize: '13px', marginTop: '4px' }}>
-            企業簽核管理系統
+            企業行政管理平台
           </p>
         </div>
 

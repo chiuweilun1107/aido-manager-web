@@ -56,6 +56,8 @@ ALTER TABLE aido.form_definitions ADD COLUMN IF NOT EXISTS chain_code TEXT;
 ALTER TABLE aido.form_definitions ADD COLUMN IF NOT EXISTS icon TEXT;
 ALTER TABLE aido.form_definitions ADD COLUMN IF NOT EXISTS group_name TEXT;
 ALTER TABLE aido.form_definitions ADD COLUMN IF NOT EXISTS sort_order INTEGER DEFAULT 0;
+ALTER TABLE aido.form_definitions ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+ALTER TABLE aido.form_definitions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
 -- form_definitions 已有 company_id (multitenant migration 回填)；補 upsert 用 unique
 DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_form_def_company_module_form') THEN

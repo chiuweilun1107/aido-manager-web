@@ -5,11 +5,11 @@ import TopBar from '@/components/TopBar'
 export default async function SystemLayout({ children }: { children: React.ReactNode }) {
   const user = await getSessionUser()
   return (
-    <div className="flex h-screen bg-gray-50">
+    <div style={{ display: 'flex', height: '100vh', background: 'var(--bg)' }}>
       <Sidebar roleCode={user.roleCode} />
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <TopBar user={user} />
-        <main className="flex-1 overflow-auto p-6">
+        <main style={{ flex: 1, overflow: 'auto', padding: '24px' }}>
           {children}
         </main>
       </div>

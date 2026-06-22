@@ -1,51 +1,152 @@
 'use client'
 import { useEffect, useState } from 'react'
-import Link from 'next/link'
 import type { SessionUser } from '@/lib/types'
 
-interface Notif {
-  id: number; title: string; body: string; link_url?: string; read_at?: string; created_at: string
+interface Notification {
+  id: number
+  title: string
+  body?: string
+  read_at?: string | null
+  created_at: string
+  link?: string
 }
 
-export default function NotificationsView({ user }: { user: SessionUser }) {
-  const [notifs, setNotifs] = useState<Notif[]>([])
+export default function NotificationsView({ user: _user }: { user: SessionUser }) {
+  const [items, setItems] = useState<Notification[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetch('/api/notifications').then(r => r.json()).then(d => {
-      setNotifs(d.notifications || [])
-      setLoading(false)
-    })
+    fetch('/api/notifications')
+      .then(r => r.json())
+      .then(data => setItems(Array.isArray(data) ? data : data.items || []))
+      .catch(() => setItems([]))
+      .finally(() => setLoading(false))
   }, [])
 
-  async function markAllRead() {
-    await fetch('/api/notifications', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) })
-    setNotifs(n => n.map(x => ({ ...x, read_at: new Date().toISOString() })))
+  async function markRead(id: number) {
+    setItems(prev => prev.map(n => n.id === id ? { ...n, read_at: new Date().toISOString() } : n))
+    await fetch(`/api/notifications/${id}/read`, { method: 'PATCH' }).catch(() => {})
   }
 
+  async function markAllRead() {
+    const now = new Date().toISOString()
+    setItems(prev => prev.map(n => ({ ...n, read_at: n.read_at || now })))
+    await fetch('/api/notifications/read-all', { method: 'PATCH' }).catch(() => {})
+  }
+
+  const unreadCount = items.filter(n => !n.read_at).length
+
   return (
-    <div className="max-w-2xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-xl font-semibold text-gray-800">通知</h1>
-        <button onClick={markAllRead} className="text-sm text-blue-500 hover:text-blue-700">全部標為已讀</button>
+    <div style={{ maxWidth: '720px', margin: '0 auto' }}>
+      {/* Header row */}
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        marginBottom: '20px',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <h1 style={{ fontSize: '22px', fontWeight: 400, color: 'var(--text)', letterSpacing: '-0.03em', margin: 0 }}>
+            通知
+          </h1>
+          {unreadCount > 0 && (
+            <span className="chip chip--in_review">
+              {unreadCount} 未讀
+            </span>
+          )}
+        </div>
+        {unreadCount > 0 && (
+          <button
+            onClick={markAllRead}
+            className="label-mono"
+            style={{
+              background: 'transparent', border: 'none', cursor: 'pointer',
+              color: 'var(--primary)', padding: '4px 8px',
+              borderRadius: 'var(--radius-sm)',
+              transition: 'color 0.15s ease',
+            }}
+          >
+            全部標為已讀
+          </button>
+        )}
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        {loading && <div className="py-12 text-center text-sm text-gray-400">載入中...</div>}
-        {!loading && notifs.length === 0 && <div className="py-12 text-center text-sm text-gray-400">沒有通知</div>}
-        {!loading && notifs.map(n => (
-          <div key={n.id} className={`flex gap-3 px-4 py-3 border-b border-gray-50 ${!n.read_at ? 'bg-blue-50/40' : ''}`}>
-            <div className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${!n.read_at ? 'bg-blue-500' : 'bg-gray-200'}`} />
-            <div className="flex-1 min-w-0">
-              <div className="text-sm font-medium text-gray-700">{n.title}</div>
-              <div className="text-xs text-gray-500 mt-0.5">{n.body}</div>
-              <div className="flex items-center gap-3 mt-1">
-                <span className="text-xs text-gray-400">{new Date(n.created_at).toLocaleString('zh-TW')}</span>
-                {n.link_url && <Link href={n.link_url} className="text-xs text-blue-500 hover:text-blue-700">查看</Link>}
+      {/* Feed */}
+      <div style={{
+        background: 'var(--surface)',
+        border: '1px solid var(--border)',
+        borderRadius: 'var(--radius)',
+        overflow: 'hidden',
+      }}>
+        {loading && (
+          <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--text-faint)', fontSize: '13px' }}>
+            載入中…
+          </div>
+        )}
+        {!loading && items.length === 0 && (
+          <div style={{ padding: '48px 16px', textAlign: 'center' }}>
+            <div style={{ color: 'var(--text-faint)', fontSize: '13px' }}>目前沒有通知</div>
+          </div>
+        )}
+        {!loading && items.map((n, i) => {
+          const isUnread = !n.read_at
+          return (
+            <div
+              key={n.id}
+              onClick={() => isUnread && markRead(n.id)}
+              style={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: '12px',
+                padding: '14px 16px',
+                borderBottom: i < items.length - 1 ? '1px solid var(--border)' : 'none',
+                background: isUnread ? 'var(--surface)' : 'transparent',
+                cursor: isUnread ? 'pointer' : 'default',
+                transition: 'background 0.1s ease',
+              }}
+              onMouseEnter={e => { if (isUnread) (e.currentTarget as HTMLElement).style.background = 'var(--surface-2)' }}
+              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = isUnread ? 'var(--surface)' : 'transparent' }}
+            >
+              {/* Unread dot */}
+              <div style={{ paddingTop: '5px', flexShrink: 0, width: '8px', display: 'flex', justifyContent: 'center' }}>
+                {isUnread && (
+                  <div style={{
+                    width: '6px', height: '6px',
+                    borderRadius: 'var(--radius-full)',
+                    background: 'var(--primary)',
+                    flexShrink: 0,
+                  }} />
+                )}
+              </div>
+
+              {/* Content */}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{
+                  fontSize: '14px',
+                  fontWeight: isUnread ? 500 : 400,
+                  color: isUnread ? 'var(--text)' : 'var(--text-muted)',
+                  lineHeight: 1.4,
+                }}>
+                  {n.title}
+                </div>
+                {n.body && (
+                  <div style={{
+                    fontSize: '13px',
+                    color: 'var(--text-faint)',
+                    marginTop: '3px',
+                    lineHeight: 1.5,
+                  }}>
+                    {n.body}
+                  </div>
+                )}
+                <div className="label-mono" style={{ marginTop: '6px', fontVariantNumeric: 'tabular-nums' }}>
+                  {new Date(n.created_at).toLocaleString('zh-TW', {
+                    month: 'numeric', day: 'numeric',
+                    hour: '2-digit', minute: '2-digit',
+                  })}
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
     </div>
   )

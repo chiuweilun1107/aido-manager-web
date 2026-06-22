@@ -277,8 +277,11 @@ export default function DashboardView({ user, shortcuts }: { user: SessionUser; 
   return (
     <>
       <style>{`
-        .dash-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; }
-        @media (max-width:768px){ .dash-grid { grid-template-columns:1fr !important; } .dash-grid > * { grid-column: span 1 !important; } }
+        /* minmax(0,1fr) + min-width:0 讓 grid cell 可縮小於內容 min-content，
+           否則 KPI(900)/INBOX(640) 撐破 cell → 整頁橫向溢出右側被切 */
+        .dash-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:16px; }
+        .dash-grid > * { min-width: 0; }
+        @media (max-width:768px){ .dash-grid { grid-template-columns:minmax(0,1fr) !important; } .dash-grid > * { grid-column: span 1 !important; min-width: 0; } }
         .edit-ctrl { position:absolute; top:8px; right:8px; z-index:5; display:flex; gap:4px; }
       `}</style>
 

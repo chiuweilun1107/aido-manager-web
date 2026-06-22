@@ -4,9 +4,8 @@ import { GeistMono } from 'geist/font/mono'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'AiDo Manager',
+  title: 'AiDo 智行 — 企業行政管理平台',
   description: '企業 BPM 簽核管理系統',
-  icons: { icon: '/favicon.ico' }
 }
 
 export const viewport: Viewport = {

@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1400" viewBox="0 0 1600 1400" fill="none" role="img" aria-label="AiDo 智行 stacked lockup color">
+  <title>AiDo 智行 stacked lockup color</title>
+  <rect width="1600" height="1400" fill="transparent"/>
+  
+<g transform="translate(255 100) scale(1.42)" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M88 316 L214 84 L340 316" stroke="#111418" stroke-width="62"/>
+  <path d="M328 112 H524 C612 112 668 166 668 240 C668 314 612 364 524 364 H224" stroke="#111418" stroke-width="62"/>
+  <path d="M174 414 C204 344 268 318 356 318" stroke="#F24A2E" stroke-width="62"/>
+</g>
+<text x="800" y="935" text-anchor="middle" fill="#111418" font-family="Inter, Arial, Helvetica, 'Noto Sans CJK TC', 'Noto Sans TC', sans-serif" font-size="230" font-weight="800" letter-spacing="-8">AiDo</text>
+<text x="800" y="1125" text-anchor="middle" fill="#111418" font-family="'Noto Sans CJK TC', 'Noto Sans TC', sans-serif" font-size="176" font-weight="800" letter-spacing="10">智行</text>
+</svg>

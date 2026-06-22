@@ -113,8 +113,14 @@ export default function Sidebar({ roleCode }: { roleCode: string }) {
         gap: '8px',
       }}>
         {!collapsed && (
-          <div style={{ minWidth: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <div style={{ width: '6px', height: '18px', background: 'var(--sidebar-active-bg)', borderRadius: '1px', flexShrink: 0 }} />
+          <div style={{ minWidth: 0, display: 'flex', alignItems: 'center', gap: '9px' }}>
+            <svg width="30" height="19" viewBox="50 46 656 406" fill="none" style={{ flexShrink: 0 }} aria-label="AiDo 智行">
+              <g strokeLinecap="round" strokeLinejoin="round">
+                <path d="M88 316 L214 84 L340 316" stroke="#FAFAF8" strokeWidth="62"/>
+                <path d="M328 112 H524 C612 112 668 166 668 240 C668 314 612 364 524 364 H224" stroke="#FAFAF8" strokeWidth="62"/>
+                <path d="M174 414 C204 344 268 318 356 318" stroke="#F24A2E" strokeWidth="62"/>
+              </g>
+            </svg>
             <div style={{ fontSize: '16px', fontWeight: 700, color: 'var(--sidebar-text)', letterSpacing: '-0.01em', whiteSpace: 'nowrap' }}>
               AiDo 智行
             </div>

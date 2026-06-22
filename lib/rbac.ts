@@ -56,7 +56,7 @@ export function maskBank(val: string | null | undefined): string {
 }
 
 export const ROLE_LABELS: Record<string, string> = {
-  employee: '員工',
+  employee: '一般職員',
   manager: '主管',
   hr: 'HR',
   it: 'IT',

@@ -137,14 +137,20 @@ export async function POST(req: NextRequest) {
   // 8. Seed announcement
   const exec = createdUsers.find(u => u.roleCode === 'executive')
   if (exec) {
-    await db.from('announcements').upsert([{
-      company_id: 1,
-      title: '歡迎使用 AiDo 智行企業管理平台',
-      body: '本平台整合假勤、薪資、簽核、採購等企業行政功能，請各單位依角色使用對應功能。',
-      status: 'published',
-      created_by_user_id: exec.id,
-      publish_at: new Date().toISOString()
-    }], { onConflict: 'title' })
+    const ANN_TITLE = '歡迎使用 AiDo 智行企業管理平台'
+    // announcements 無 title unique 約束，不能用 onConflict；改先查再插 (冪等)
+    const { data: existingAnn } = await db.from('announcements')
+      .select('id').eq('company_id', 1).eq('title', ANN_TITLE).maybeSingle()
+    if (!existingAnn) {
+      await db.from('announcements').insert([{
+        company_id: 1,
+        title: ANN_TITLE,
+        body: '本平台整合假勤、薪資、簽核、採購等企業行政功能，請各單位依角色使用對應功能。',
+        status: 'published',
+        created_by_user_id: exec.id,
+        publish_at: new Date().toISOString()
+      }])
+    }
     results.push('announcement: 1')
   }
 

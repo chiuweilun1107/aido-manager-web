@@ -128,3 +128,28 @@ export async function getEffectiveModules(companyId: number): Promise<Module[]> 
     return MODULES // DB 出錯不破壞：fallback code 預設
   }
 }
+
+// 單一 module 解析：code 預設 MODULE_MAP → fallback DB 自訂表單。
+// 給 /api/modules/[code] 與 bpm.createAndSubmit 用 (取代寫死 MODULE_MAP，讓自訂表單也能列表/開單)
+export async function getEffectiveModule(companyId: number, code: string): Promise<Module | null> {
+  if (MODULE_MAP[code]) return MODULE_MAP[code]
+  try {
+    const { data } = await svc().from('form_definitions')
+      .select('module_code, name, icon, group_code, group_name, chain_code, fields_json, columns_json, is_active, version')
+      .eq('company_id', companyId).eq('module_code', code).eq('is_active', true)
+      .order('version', { ascending: false }).limit(1).maybeSingle()
+    if (data) {
+      const fields = Array.isArray(data.fields_json) ? (data.fields_json as ModuleField[]) : []
+      const amountField = fields.find(f => f.type === 'money' || f.type === 'number')?.key
+      return {
+        code: data.module_code, name: data.name, icon: data.icon || 'document-text',
+        group: data.group_name || '其他', kind: 'request', chain: data.chain_code || undefined,
+        amountField,
+        fields,
+        columns: Array.isArray(data.columns_json) && data.columns_json.length ? (data.columns_json as ModuleColumn[]) : undefined,
+        roles_visible: '*',
+      } as Module
+    }
+  } catch { /* fall through */ }
+  return null
+}

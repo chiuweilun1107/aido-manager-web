@@ -47,13 +47,18 @@ export async function seedPlatformConfig(db: DB, companyId: number): Promise<str
   { const { error } = await db.from('role_field_access').upsert(fieldRows, { onConflict: 'company_id,role_code,field_key' }); if (error) throw new Error('role_field_access: ' + error.message) }
   results.push(`role_field_access: ${fieldRows.length}`)
 
-  // 3. approval_chain_templates：從 code CHAINS
-  const chainRows = Object.values(CHAINS).map((c) => ({
-    company_id: companyId, chain_code: c.chain_code, name: (c as { name?: string }).name || c.chain_code,
-    module_code: null, amount_field: c.amount_field || 'amount',
+  // 3. approval_chain_templates：從 code CHAINS。name 用對應 module 中文名 (chain_code = {module}_default)
+  const chainRows = Object.values(CHAINS).map((c) => {
+    const moduleCode = c.chain_code.replace(/_default$/, '')
+    const mod = MODULES.find(m => m.code === moduleCode)
+    const zhName = (c as { name?: string }).name || (mod ? `${mod.name}簽核流程` : c.chain_code)
+    return {
+    company_id: companyId, chain_code: c.chain_code, name: zhName,
+    module_code: moduleCode || null, amount_field: c.amount_field || 'amount',
     steps_json: c.steps,                                  // jsonb (傳 array)
     is_active: true,
-  }))
+  }
+  })
   { const { error } = await db.from('approval_chain_templates').upsert(chainRows, { onConflict: 'company_id,chain_code' }); if (error) throw new Error('approval_chain_templates: ' + error.message) }
   results.push(`approval_chain_templates: ${chainRows.length}`)
 

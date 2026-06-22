@@ -1,6 +1,6 @@
 import { SupabaseClient } from '@supabase/supabase-js'
 import { CHAINS } from './chains'
-import { resolveChain } from './platform-config'
+import { resolveChain, getEffectiveModule } from './platform-config'
 import { MODULE_MAP } from './modules'
 import { sendEmail, approvalPendingEmail, requestResultEmail } from './email'
 import { dispatchWebhook } from './webhook'
@@ -130,7 +130,8 @@ async function buildTiers(client: SupabaseClient, chain: typeof CHAINS[string], 
 }
 
 async function expandSteps(client: SupabaseClient, request: Record<string, unknown>, payload: Record<string, unknown>) {
-  const mod = MODULE_MAP[String(request.module_code)]
+  // 含自訂表單 → 自訂表單的簽核流程(form_definitions.chain_code)也能展開
+  const mod = await getEffectiveModule(Number(request.company_id) || 1, String(request.module_code))
   // DB 簽核流程樣板優先 (簽核流程設計器編輯結果) → fallback code CHAINS
   const chain = mod && mod.chain ? await resolveChain(Number(request.company_id) || 1, mod.chain) : null
   if (!chain) {
@@ -307,7 +308,8 @@ export async function getActiveStepFor(client: SupabaseClient, user: Record<stri
 
 // ---------- 建單並送出 ----------
 export async function createAndSubmit(client: SupabaseClient, user: Record<string, unknown>, moduleCode: string, payload: Record<string, unknown>, ctx: { source?: string; ip?: string; ua?: string } = {}) {
-  const mod = MODULE_MAP[moduleCode]
+  // 含自訂表單 (DB form_definitions) → 自訂表單也能開單
+  const mod = await getEffectiveModule(Number(user.company_id) || 1, moduleCode)
   if (!mod || mod.kind !== 'request') throw new Error('模組不可開單: ' + moduleCode)
   const amount = mod.amountField ? Number(payload[mod.amountField]) || 0 : null
   const title = `${mod.name} · ${user.display_name}`

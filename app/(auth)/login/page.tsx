@@ -60,12 +60,10 @@ export default function LoginPage() {
         /* 內容容器置中：寬螢幕內容不拉開，grid 在兩側延伸 */
         .login-inner {
           width: 100%; max-width: 1160px; display: flex; align-items: stretch;
-          border-left: 1px solid var(--border); border-right: 1px solid var(--border);
         }
         .login-brand {
           flex: 0 0 45%; position: relative; overflow: hidden;
           padding: 56px 48px; display: flex; flex-direction: column; justify-content: space-between;
-          border-right: 1px solid var(--border);
         }
         .login-formcol { flex: 1; display: flex; align-items: center; justify-content: center; padding: 48px 44px; }
         .login-formwrap { width: 100%; max-width: 360px; }
@@ -82,15 +80,6 @@ export default function LoginPage() {
         <div className="login-inner">
         {/* 左：品牌敘事 (Dossier) */}
         <div className="login-brand">
-          {/* 背景 Flow Mark 低透明 */}
-          <svg viewBox="50 46 656 406" style={{ position: 'absolute', right: '-80px', bottom: '-40px', width: '560px', opacity: 0.05, pointerEvents: 'none' }} fill="none" aria-hidden="true">
-            <g strokeLinecap="round" strokeLinejoin="round" stroke="var(--text)">
-              <path d="M88 316 L214 84 L340 316" strokeWidth="62"/>
-              <path d="M328 112 H524 C612 112 668 166 668 240 C668 314 612 364 524 364 H224" strokeWidth="62"/>
-            </g>
-            <path d="M174 414 C204 344 268 318 356 318" stroke="var(--primary)" strokeWidth="62" strokeLinecap="round" fill="none"/>
-          </svg>
-
           <div className="label-mono" style={{ position: 'relative', lineHeight: 2, color: 'var(--text-faint)' }}>
             SYSTEM ACCESS<br />AIDO-ADMIN-PORTAL<br />ROLE-BASED ENTRY · AUDIT ENABLED
           </div>

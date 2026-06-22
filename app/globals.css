@@ -106,20 +106,12 @@ body {
   main { padding: 14px !important; }
   .rwd-cols-2 { grid-template-columns: 1fr !important; }
   .rwd-cols-3 { grid-template-columns: 1fr !important; }
-  /* KPI 手機改水平滑動: 6 格一排可左右滑，每格 47% 寬 (露出下一格暗示可滑) */
-  .rwd-kpi {
-    grid-template-columns: none !important;
-    grid-auto-flow: column !important;
-    grid-auto-columns: 47% !important;
-    overflow-x: auto !important;
-    -webkit-overflow-scrolling: touch;
-  }
   .tb-roleinfo { display: none !important; }
 }
-@media (max-width: 480px) {
-  /* ≤480 KPI 每格再寬一點 (露出半格暗示可滑) */
-  .rwd-kpi { grid-auto-columns: 60% !important; }
-}
+/* KPI 任何寬度都可左右滑動 (非僅手機): DashboardView inline 用
+   repeat(6, minmax(150px,1fr)) + overflowX auto — 視窗夠寬 6 欄 fit，
+   窄則每格守 150px 超出可滑 (桌面/平板/手機皆然) */
+.rwd-kpi { -webkit-overflow-scrolling: touch; scrollbar-width: thin; }
 
 /* ============ 手機 sidebar drawer ============ */
 .mobile-menu-btn { display: none; }

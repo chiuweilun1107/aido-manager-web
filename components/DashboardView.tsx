@@ -107,7 +107,7 @@ export default function DashboardView({ user, shortcuts }: { user: SessionUser; 
   function renderBlock(id: BlockId) {
     switch (id) {
       case 'kpi': return (
-        <div className="rwd-kpi" style={{ ...card, display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', overflow: 'hidden' }}>
+        <div className="rwd-kpi" style={{ ...card, display: 'grid', gridTemplateColumns: 'repeat(6, minmax(150px, 1fr))', overflowX: 'auto' }}>
           {kpis.map((k, i) => (
             <div key={k.label} style={{ padding: '18px 20px', borderRight: i < kpis.length - 1 ? '1px solid var(--border)' : 'none', position: 'relative' }}>
               {k.accent && <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '3px', background: 'var(--primary)' }} />}

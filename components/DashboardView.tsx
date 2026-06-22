@@ -3,34 +3,55 @@ import { useEffect, useState, useRef, type ReactNode, type CSSProperties } from 
 import Link from 'next/link'
 import type { SessionUser } from '@/lib/types'
 
-// 可左右滑動容器 + 浮動箭頭按鈕 (不依賴系統捲軸顯示，macOS overlay scrollbar 靜態隱藏也能操作)
+// 可左右滑動容器 + 自繪捲軸 (純 DOM, 不依賴瀏覽器原生捲軸 — macOS overlay 怎樣都隱藏，
+// 故自己用 div 畫一條 track+thumb，100% 顯示、可拖、可點)
 function ScrollX({ children, style, className }: { children: ReactNode; style?: CSSProperties; className?: string }) {
   const ref = useRef<HTMLDivElement>(null)
-  const [canL, setCanL] = useState(false)
-  const [canR, setCanR] = useState(false)
+  const [tb, setTb] = useState({ show: false, w: 0, left: 0 })
+  const sync = () => {
+    const el = ref.current; if (!el) return
+    const { scrollWidth, clientWidth, scrollLeft } = el
+    if (scrollWidth <= clientWidth + 2) { setTb(s => (s.show ? { ...s, show: false } : s)); return }
+    setTb({ show: true, w: (clientWidth / scrollWidth) * 100, left: (scrollLeft / scrollWidth) * 100 })
+  }
   useEffect(() => {
     const el = ref.current; if (!el) return
-    const update = () => {
-      setCanL(el.scrollLeft > 4)
-      setCanR(el.scrollLeft < el.scrollWidth - el.clientWidth - 4)
-    }
-    update()
-    el.addEventListener('scroll', update, { passive: true })
-    window.addEventListener('resize', update)
-    return () => { el.removeEventListener('scroll', update); window.removeEventListener('resize', update) }
+    sync()
+    el.addEventListener('scroll', sync, { passive: true })
+    window.addEventListener('resize', sync)
+    const t = setTimeout(sync, 300) // 等資料載入後內容寬度變化再算一次
+    return () => { el.removeEventListener('scroll', sync); window.removeEventListener('resize', sync); clearTimeout(t) }
   }, [children])
-  const go = (dir: number) => ref.current?.scrollBy({ left: dir * 280, behavior: 'smooth' })
-  const arrow = (side: 'left' | 'right'): CSSProperties => ({
-    position: 'absolute', top: '50%', transform: 'translateY(-50%)', [side]: '8px',
-    width: '34px', height: '34px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
-    background: 'var(--surface)', border: '1px solid var(--border-strong)', color: 'var(--text)',
-    boxShadow: '0 2px 10px rgba(0,0,0,0.14)', cursor: 'pointer', zIndex: 5, fontSize: '20px', lineHeight: 1, padding: 0,
-  })
+  // 拖曳 thumb → 對應 scrollLeft
+  const onThumbDown = (e: React.MouseEvent) => {
+    e.preventDefault(); e.stopPropagation()
+    const el = ref.current; if (!el) return
+    const startX = e.clientX, startLeft = el.scrollLeft
+    const ratio = el.scrollWidth / el.clientWidth
+    const move = (ev: MouseEvent) => { el.scrollLeft = startLeft + (ev.clientX - startX) * ratio }
+    const up = () => { document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up); document.body.style.userSelect = '' }
+    document.body.style.userSelect = 'none'
+    document.addEventListener('mousemove', move)
+    document.addEventListener('mouseup', up)
+  }
+  // 點 track 空白處 → 跳到該位置
+  const onTrackDown = (e: React.MouseEvent) => {
+    const el = ref.current, track = e.currentTarget as HTMLDivElement
+    if (!el) return
+    const rect = track.getBoundingClientRect()
+    const pct = (e.clientX - rect.left) / rect.width
+    el.scrollTo({ left: pct * el.scrollWidth - el.clientWidth / 2, behavior: 'smooth' })
+  }
   return (
     <div style={{ position: 'relative' }}>
       <div ref={ref} className={className} style={{ ...style, overflowX: 'auto' }}>{children}</div>
-      {canL && <button aria-label="向左滑動" onClick={() => go(-1)} style={arrow('left')}>‹</button>}
-      {canR && <button aria-label="向右滑動" onClick={() => go(1)} style={arrow('right')}>›</button>}
+      {tb.show && (
+        <div onMouseDown={onTrackDown}
+          style={{ position: 'relative', height: '10px', marginTop: '8px', background: 'var(--surface-2)', borderRadius: '5px', cursor: 'pointer' }}>
+          <div onMouseDown={onThumbDown}
+            style={{ position: 'absolute', top: 0, height: '100%', width: `${tb.w}%`, left: `${tb.left}%`, minWidth: '36px', background: 'var(--border-strong)', borderRadius: '5px', cursor: 'grab' }} />
+        </div>
+      )}
     </div>
   )
 }

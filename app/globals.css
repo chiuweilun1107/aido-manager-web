@@ -60,15 +60,9 @@
 }
 *::-webkit-scrollbar { display: none; }
 
-/* 可左右滑動的區塊 (KPI/表格): 局部顯示細捲軸當操作提示 (覆寫上面全域隱藏)。
-   桌面: 可拖捲軸 / trackpad 雙指橫滑 / Shift+滾輪 */
-.scroll-x { overflow-x: auto; scrollbar-width: thin !important; scrollbar-color: var(--border-strong) var(--surface-2); }
-/* -webkit-appearance:none 強制 macOS 用常駐 classic 捲軸 (覆寫系統 overlay 自動隱藏)，
-   否則 macOS Chrome 即使設樣式仍 idle 隱藏看不到。auto = 超出才顯示，fit 時無空軌道 */
-.scroll-x::-webkit-scrollbar { -webkit-appearance: none !important; display: block !important; width: 10px; height: 10px; }
-.scroll-x::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 5px; border: 2px solid var(--surface-2); min-width: 40px; }
-.scroll-x::-webkit-scrollbar-thumb:hover { background: var(--text-faint); }
-.scroll-x::-webkit-scrollbar-track { background: var(--surface-2); border-radius: 5px; }
+/* 可左右滑動的區塊 (KPI/表格): 原生捲軸維持全域隱藏，改用 ScrollX 元件自繪 DOM 捲軸
+   (macOS overlay 原生捲軸怎樣都隱藏，自繪 div 才 100% 可見可拖) */
+.scroll-x { overflow-x: auto; }
 body {
   background: var(--bg);
   color: var(--text);

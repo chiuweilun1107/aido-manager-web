@@ -85,15 +85,9 @@ export default function LoginPage() {
           </div>
 
           <div style={{ position: 'relative' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
-              <svg width="44" height="28" viewBox="50 46 656 406" fill="none" aria-label="AiDo">
-                <g strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M88 316 L214 84 L340 316" stroke="var(--text)" strokeWidth="62"/>
-                  <path d="M328 112 H524 C612 112 668 166 668 240 C668 314 612 364 524 364 H224" stroke="var(--text)" strokeWidth="62"/>
-                  <path d="M174 414 C204 344 268 318 356 318" stroke="var(--primary)" strokeWidth="62"/>
-                </g>
-              </svg>
-              <span style={{ fontSize: '24px', fontWeight: 700, color: 'var(--text)', letterSpacing: '-0.02em' }}>AiDo 智行</span>
+            <div style={{ marginBottom: '20px' }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/brand/aido-logo-horizontal.png" alt="AiDo 智行" style={{ height: '40px', width: 'auto', display: 'block' }} className="login-logo-img" />
             </div>
             <h1 style={{ fontSize: '30px', fontWeight: 700, color: 'var(--text)', letterSpacing: '-0.04em', lineHeight: 1.2, margin: '0 0 14px' }}>
               企業 AI 行政管理平台
@@ -124,14 +118,8 @@ export default function LoginPage() {
           <div className="login-formwrap">
             {/* 手機 logo */}
             <div className="login-mobilelogo">
-              <svg width="42" height="26" viewBox="50 46 656 406" fill="none" aria-label="AiDo">
-                <g strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M88 316 L214 84 L340 316" stroke="var(--text)" strokeWidth="62"/>
-                  <path d="M328 112 H524 C612 112 668 166 668 240 C668 314 612 364 524 364 H224" stroke="var(--text)" strokeWidth="62"/>
-                  <path d="M174 414 C204 344 268 318 356 318" stroke="var(--primary)" strokeWidth="62"/>
-                </g>
-              </svg>
-              <span style={{ fontSize: '22px', fontWeight: 700, color: 'var(--text)', letterSpacing: '-0.02em' }}>AiDo 智行</span>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/brand/aido-logo-horizontal.png" alt="AiDo 智行" style={{ height: '34px', width: 'auto' }} />
             </div>
 
             <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: '24px' }}>

@@ -219,7 +219,7 @@ export const MODULES: Module[] = [
     ]
   },
   {
-    code: 'probation', name: '試用期評核', icon: 'academic-cap', group: '人資', kind: 'request', chain: 'probation_default',
+    code: 'probation', name: '試用期評核', icon: 'check-badge', group: '人資', kind: 'request', chain: 'probation_default',
     roles_visible: ['hr', 'manager', 'executive', 'auditor'],
     fields: [
       { key: 'target_user_id', label: '評核對象', type: 'user', required: true },
@@ -278,7 +278,7 @@ export const MODULES: Module[] = [
     ]
   },
   {
-    code: 'onboarding', name: '新人報到', icon: 'academic-cap', group: '人資', kind: 'record', table: 'onboarding_cases',
+    code: 'onboarding', name: '新人報到', icon: 'identification', group: '人資', kind: 'record', table: 'onboarding_cases',
     roles_visible: ['hr', 'it', 'admin_officer', 'finance', 'executive', 'auditor', 'manager'],
     fields: [
       { key: 'user_id', label: '新人', type: 'user', required: true },

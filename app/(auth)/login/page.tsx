@@ -63,12 +63,12 @@ export default function LoginPage() {
         }
         .login-formcol { width: 56%; display: flex; align-items: center; justify-content: center; padding: 40px 32px; }
         .login-formwrap { width: 100%; max-width: 380px; }
-        .login-mobilelogo { display: none; }
+        .login-mobilelogo { display: none; align-items: center; justify-content: center; gap: 10px; margin-bottom: 24px; }
         @media (max-width: 900px) {
           .login-shell { flex-direction: column; }
           .login-brand { display: none; }
           .login-formcol { width: 100%; padding: 32px 20px; }
-          .login-mobilelogo { display: block; }
+          .login-mobilelogo { display: flex; }
         }
       `}</style>
 
@@ -127,7 +127,7 @@ export default function LoginPage() {
         <div className="login-formcol">
           <div className="login-formwrap">
             {/* 手機 logo */}
-            <div className="login-mobilelogo" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', marginBottom: '24px' }}>
+            <div className="login-mobilelogo">
               <svg width="42" height="26" viewBox="50 46 656 406" fill="none" aria-label="AiDo">
                 <g strokeLinecap="round" strokeLinejoin="round">
                   <path d="M88 316 L214 84 L340 316" stroke="var(--text)" strokeWidth="62"/>

@@ -538,17 +538,18 @@ export default function FormBuilderView({ user: _user }: { user: SessionUser }) 
             {!loading && forms.length === 0 && (
               <div style={{ padding: '24px', textAlign: 'center', fontSize: '13px', color: 'var(--text-faint)' }}>尚無表單</div>
             )}
+            <div style={{ padding: '8px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {forms.map(f => (
               <div
                 key={f.id}
                 onClick={() => selectForm(f)}
                 style={{
                   padding: '11px 14px',
-                  borderBottom: '1px solid var(--border)',
+                  border: selectedId === f.id ? '1px solid var(--primary)' : '1px solid var(--border)',
+                  borderRadius: 'var(--radius)',
                   cursor: 'pointer',
-                  background: selectedId === f.id ? 'var(--surface-2)' : 'transparent',
-                  borderLeft: selectedId === f.id ? '3px solid var(--primary)' : '3px solid transparent',
-                  transition: 'background .1s',
+                  background: selectedId === f.id ? 'var(--surface-2)' : 'var(--surface)',
+                  transition: 'border-color .15s, background .1s',
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -576,6 +577,7 @@ export default function FormBuilderView({ user: _user }: { user: SessionUser }) 
                 </div>
               </div>
             ))}
+            </div>
           </div>
         </div>
 

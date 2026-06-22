@@ -113,5 +113,14 @@ export const CHAINS: Record<string, Chain> = {
       { step_no: 20, name: '財務預算', type: 'serial', approver: { resolver: 'role', role_code: 'finance' }, required: 'any' },
       { step_no: 30, name: '經營者核准', type: 'serial', approver: { resolver: 'role', role_code: 'executive' }, required: 'any' }
     ]
+  },
+  business_trip_default: {
+    chain_code: 'business_trip_default',
+    amount_field: 'estimated_cost',
+    steps: [
+      { step_no: 10, name: '直屬主管', type: 'serial', approver: { resolver: 'direct_manager', fallback: { resolver: 'department_manager' } }, required: 'all' },
+      { step_no: 20, name: '部門主管', type: 'serial', condition: { field: 'estimated_cost', op: '>', value: 10000 }, approver: { resolver: 'department_manager' }, required: 'all' },
+      { step_no: 30, name: '經營者核准', type: 'serial', condition: { field: 'estimated_cost', op: '>', value: 30000 }, approver: { resolver: 'role', role_code: 'executive' }, required: 'any' }
+    ]
   }
 }

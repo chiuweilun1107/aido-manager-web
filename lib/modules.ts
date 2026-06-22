@@ -103,12 +103,28 @@ export const MODULES: Module[] = [
     ]
   },
   {
+    code: 'business_trip', name: '出差申請', icon: 'briefcase', group: '行政 / 財務', kind: 'request', chain: 'business_trip_default', amountField: 'estimated_cost', roles_visible: ALL,
+    fields: [
+      { key: 'destination', label: '出差地點', type: 'text', required: true },
+      { key: 'start_at', label: '出發日期', type: 'date', required: true },
+      { key: 'end_at', label: '返回日期', type: 'date', required: true },
+      { key: 'transport', label: '交通方式', type: 'select', required: true, options: ['高鐵', '台鐵', '飛機', '客運', '自行開車', '其他'] },
+      { key: 'estimated_cost', label: '預估費用', type: 'money' },
+      { key: 'purpose', label: '出差目的', type: 'textarea', required: true }
+    ],
+    columns: [
+      { key: 'request_no', label: '單號' }, { key: 'payload.destination', label: '地點' },
+      { key: 'payload.start_at', label: '出發' }, { key: 'status', label: '狀態', type: 'status' }
+    ]
+  },
+  {
     code: 'expense', name: '費用報銷', icon: 'receipt', group: '行政 / 財務', kind: 'request', chain: 'expense_default', amountField: 'amount', roles_visible: ALL,
     fields: [
       { key: 'category', label: '類別', type: 'select', required: true, options: ['差旅', '餐費', '辦公用品', '訓練', '其他'] },
       { key: 'expense_date', label: '費用日期', type: 'date', required: true },
       { key: 'amount', label: '金額', type: 'money', required: true },
       { key: 'tax_id', label: '統編' },
+      { key: 'business_trip_no', label: '關聯出差單號（差旅費請先申請出差核准後填入）', type: 'text' },
       { key: 'reason', label: '說明', type: 'textarea' }
     ],
     columns: [
@@ -295,7 +311,7 @@ export const MODULES: Module[] = [
     ]
   },
   {
-    code: 'offboarding', name: '離職', icon: 'arrow-right-start', group: '人資', kind: 'record', table: 'offboarding_cases',
+    code: 'offboarding', name: '離職', icon: 'arrow-right-on-rectangle', group: '人資', kind: 'record', table: 'offboarding_cases',
     roles_visible: ['hr', 'it', 'admin_officer', 'finance', 'legal', 'executive', 'auditor', 'manager'],
     fields: [
       { key: 'user_id', label: '離職員工', type: 'user', required: true },

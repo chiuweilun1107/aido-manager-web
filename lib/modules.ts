@@ -86,7 +86,7 @@ export const MODULES: Module[] = [
     ]
   },
   {
-    code: 'attendance_correction', name: '補打卡', icon: 'wrench', group: '差勤', kind: 'request', chain: 'attendance_correction_default', roles_visible: ALL,
+    code: 'attendance_correction', name: '補打卡', icon: 'clock-pencil', group: '差勤', kind: 'request', chain: 'attendance_correction_default', roles_visible: ALL,
     fields: [
       { key: 'work_date', label: '補卡日期', type: 'date', required: true },
       { key: 'correction_type', label: '類型', type: 'select', required: true, options: ['missing_in 缺上班卡', 'missing_out 缺下班卡', 'adjust_time 調整時間'] },
@@ -128,7 +128,7 @@ export const MODULES: Module[] = [
     ]
   },
   {
-    code: 'seal', name: '用印', icon: 'document', group: '行政 / 財務', kind: 'request', chain: 'seal_default', amountField: 'amount', roles_visible: ALL,
+    code: 'seal', name: '用印', icon: 'stamp', group: '行政 / 財務', kind: 'request', chain: 'seal_default', amountField: 'amount', roles_visible: ALL,
     fields: [
       { key: 'seal_type', label: '印章', type: 'select', required: true, options: ['公司大章', '發票章', '合約章'] },
       { key: 'document_title', label: '文件名稱', type: 'text', required: true },
@@ -143,7 +143,7 @@ export const MODULES: Module[] = [
     ]
   },
   {
-    code: 'asset', name: '資產管理', icon: 'server', group: '行政 / 財務', kind: 'record', table: 'assets',
+    code: 'asset', name: '資產管理', icon: 'archive-box', group: '行政 / 財務', kind: 'record', table: 'assets',
     roles_visible: ['admin_officer', 'it', 'hr', 'finance', 'executive', 'auditor', 'employee', 'manager'],
     fields: [
       { key: 'name', label: '資產名稱', type: 'text', required: true },
@@ -249,7 +249,7 @@ export const MODULES: Module[] = [
     ]
   },
   {
-    code: 'lms', name: '教育訓練', icon: 'book-open', group: '人資', kind: 'record', table: 'training_records', roles_visible: ALL,
+    code: 'lms', name: '教育訓練', icon: 'academic-cap', group: '人資', kind: 'record', table: 'training_records', roles_visible: ALL,
     fields: [
       { key: 'user_id', label: '學員', type: 'user', required: true },
       { key: 'course_name', label: '課程', type: 'text', required: true },
@@ -319,7 +319,7 @@ export const MODULES: Module[] = [
   },
   { code: 'workforce', name: '人力編制', icon: 'chart-bar', group: '人資', kind: 'view', view: 'workforce', roles_visible: ['hr', 'manager', 'finance', 'executive', 'auditor'] },
   {
-    code: 'announcement', name: '公告', icon: 'newspaper', group: '治理 / 系統', kind: 'record', table: 'announcements', roles_visible: ALL,
+    code: 'announcement', name: '公告', icon: 'megaphone-closed', group: '治理 / 系統', kind: 'record', table: 'announcements', roles_visible: ALL,
     fields: [
       { key: 'title', label: '標題', type: 'text', required: true },
       { key: 'body', label: '內容', type: 'textarea', required: true },

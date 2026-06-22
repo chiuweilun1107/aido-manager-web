@@ -1,7 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import Icon from '@/components/Icon'
 import type { SessionUser } from '@/lib/types'
 
 interface DashConfig { title: string; link: string }
@@ -39,14 +38,6 @@ function Donut({ pct, center, sub }: { pct: number; center: string; sub: string 
   )
 }
 
-const WORKFLOW_STEPS = [
-  { icon: 'document', label: '申請建立', desc: '填寫並送出表單' },
-  { icon: 'users', label: '主管審核', desc: '直屬主管核可' },
-  { icon: 'currency-dollar', label: '財務覆核', desc: '財務金額審查' },
-  { icon: 'shield-check', label: '權責核定', desc: '權責主管簽核' },
-  { icon: 'archive-box', label: '行政歸檔', desc: '完成並存查' },
-]
-
 export default function DashboardView({ user, shortcuts }: { user: SessionUser; shortcuts: DashConfig[] }) {
   const [data, setData] = useState<DashData | null>(null)
   const [fetchError, setFetchError] = useState(false)
@@ -83,7 +74,6 @@ export default function DashboardView({ user, shortcuts }: { user: SessionUser; 
         .ib-row { display:flex; align-items:center; padding:11px 16px; border-bottom:1px solid var(--border); text-decoration:none; transition:background .1s ease; }
         .ib-row:hover { background: var(--surface-2); }
         .ib-row:last-child { border-bottom:none; }
-        .wf-line { flex:1; height:1px; background:var(--border-strong); margin:0 4px; }
       `}</style>
 
       <div style={{ maxWidth: '1280px', margin: '0 auto' }}>
@@ -185,25 +175,6 @@ export default function DashboardView({ user, shortcuts }: { user: SessionUser; 
               </div>
             ))}
             {reqs.length === 0 && <div style={{ fontSize: '12px', color: 'var(--text-faint)' }}>尚無紀錄</div>}
-          </div>
-        </div>
-
-        {/* 行政流程概覽 WORKFLOW */}
-        <div style={{ ...card, padding: '18px 20px 22px' }}>
-          <h3 style={{ ...sectionTitle, marginBottom: '18px' }}>行政流程概覽 <span className="label-mono" style={{ marginLeft: '6px' }}>/ WORKFLOW</span></h3>
-          <div style={{ display: 'flex', alignItems: 'flex-start' }}>
-            {WORKFLOW_STEPS.map((s, i) => (
-              <div key={s.label} style={{ display: 'contents' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', flexShrink: 0, width: '110px' }}>
-                  <div style={{ width: '44px', height: '44px', borderRadius: '50%', border: '1.5px solid var(--border-strong)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--primary)', background: 'var(--surface)' }}>
-                    <Icon name={s.icon} size={20} />
-                  </div>
-                  <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text)' }}>{s.label}</div>
-                  <div style={{ fontSize: '10px', color: 'var(--text-faint)', textAlign: 'center', lineHeight: 1.4 }}>{s.desc}</div>
-                </div>
-                {i < WORKFLOW_STEPS.length - 1 && <div className="wf-line" style={{ marginTop: '22px' }} />}
-              </div>
-            ))}
           </div>
         </div>
 

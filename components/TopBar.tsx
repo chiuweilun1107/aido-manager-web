@@ -91,18 +91,6 @@ export default function TopBar({ user }: { user: SessionUser }) {
 
       <div style={{ flex: 1 }} />
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: '14px', fontSize: '12px', fontFamily: 'var(--font-geist-mono), monospace' }}>
-        <span style={{ color: 'var(--text-faint)' }}>角色 <span style={{ color: 'var(--text)', fontWeight: 600 }}>{user.roleName}</span></span>
-        {user.departmentName && (
-          <>
-            <span style={{ color: 'var(--border-strong)' }}>|</span>
-            <span style={{ color: 'var(--text-faint)' }}>部門 <span style={{ color: 'var(--text)', fontWeight: 600 }}>{user.departmentName}</span></span>
-          </>
-        )}
-      </div>
-
-      <div style={{ width: '1px', height: '20px', background: 'var(--border)' }} />
-
       {/* 主題三態切換 (淺色/深色/跟隨系統) */}
       {themeMode !== null && (
         <div ref={menuRef} style={{ position: 'relative' }}>
@@ -153,6 +141,19 @@ export default function TopBar({ user }: { user: SessionUser }) {
           <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>
         </svg>
       </button>
+
+      {/* 部門 / 角色 資訊 (通知之後、用戶名之前；先部門再角色) */}
+      <div style={{ width: '1px', height: '20px', background: 'var(--border)' }} />
+      <div style={{ display: 'flex', alignItems: 'center', gap: '14px', fontSize: '12px', fontFamily: 'var(--font-geist-mono), monospace' }}>
+        {user.departmentName && (
+          <>
+            <span style={{ color: 'var(--text-faint)' }}>部門 <span style={{ color: 'var(--text)', fontWeight: 600 }}>{user.departmentName}</span></span>
+            <span style={{ color: 'var(--border-strong)' }}>|</span>
+          </>
+        )}
+        <span style={{ color: 'var(--text-faint)' }}>角色 <span style={{ color: 'var(--text)', fontWeight: 600 }}>{user.roleName}</span></span>
+      </div>
+      <div style={{ width: '1px', height: '20px', background: 'var(--border)' }} />
 
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
         <div style={{

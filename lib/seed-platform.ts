@@ -10,6 +10,17 @@ export async function seedPlatformConfig(db: DB, companyId: number): Promise<str
   const results: string[] = []
   const allRoles = Object.keys(ROLE_ACTIONS) // 9 個系統角色
 
+  // 0. menu_groups：5 大類預設 (sidebar 群組順序，可自訂)
+  const GROUPS = [
+    { code: 'workspace', name: '我的工作區', sort_order: 1 },
+    { code: 'attendance', name: '差勤', sort_order: 2 },
+    { code: 'admin_finance', name: '行政 / 財務', sort_order: 3 },
+    { code: 'hr', name: '人資', sort_order: 4 },
+    { code: 'governance', name: '治理 / 系統', sort_order: 5 },
+  ]
+  { const { error } = await db.from('menu_groups').upsert(GROUPS.map(g => ({ ...g, company_id: companyId, is_system: true })), { onConflict: 'company_id,code' }); if (error) throw new Error('menu_groups: ' + error.message) }
+  results.push(`menu_groups: ${GROUPS.length}`)
+
   // 1. role_permissions：每 role × 每 module 一列 (visible 來自 module.roles_visible)
   const permRows: Record<string, unknown>[] = []
   for (const role of allRoles) {

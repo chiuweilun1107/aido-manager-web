@@ -1,6 +1,5 @@
 import { getSessionUser } from '@/lib/session'
-import { MODULE_MAP } from '@/lib/modules'
-import { resolveFormFields, resolveRolePermissions } from '@/lib/platform-config'
+import { resolveFormFields, resolveRolePermissions, getEffectiveModules } from '@/lib/platform-config'
 import { SessionUser } from '@/lib/types'
 import { notFound } from 'next/navigation'
 import type { ComponentType } from 'react'
@@ -11,6 +10,7 @@ import HrmView from '@/components/admin/HrmView'
 import RBACView from '@/components/admin/RBACView'
 import FormBuilderView from '@/components/admin/FormBuilderView'
 import WorkflowDesignerView from '@/components/admin/WorkflowDesignerView'
+import MenuGroupsView from '@/components/admin/MenuGroupsView'
 
 // view code → admin component。新增 admin 頁只需在此註冊 + modules.ts 加 view module
 const VIEW_MAP: Record<string, ComponentType<{ user: SessionUser }>> = {
@@ -19,12 +19,15 @@ const VIEW_MAP: Record<string, ComponentType<{ user: SessionUser }>> = {
   rbac: RBACView,
   forms: FormBuilderView,
   workflows: WorkflowDesignerView,
+  'menu-groups': MenuGroupsView,
 }
 
 export default async function ModulePage({ params }: { params: Promise<{ code: string }> }) {
   const { code } = await params
   const user = await getSessionUser()
-  const mod = MODULE_MAP[code]
+  // 完整 module 清單(含自訂表單) → 找目標 module
+  const effModules = await getEffectiveModules(user.companyId)
+  const mod = effModules.find(m => m.code === code)
   if (!mod) notFound()
   // 可見性守衛改用 DB 權限 (權限管理編輯結果) → fallback code
   const perms = await resolveRolePermissions(user.companyId, user.roleCode)

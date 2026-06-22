@@ -3,8 +3,8 @@
 import { createServiceClient } from './supabase/server'
 import { CHAINS } from './chains'
 import type { Chain } from './chains'
-import { MODULE_MAP } from './modules'
-import type { ModuleField, ModuleColumn } from './modules'
+import { MODULE_MAP, MODULES } from './modules'
+import type { ModuleField, ModuleColumn, Module } from './modules'
 import { ROLE_ACTIONS, ROLE_READ_SCOPE, FIELD_FULL_ACCESS, type Action } from './rbac'
 import { visibleModules } from './modules'
 
@@ -82,4 +82,49 @@ export async function resolveRolePermissions(companyId: number, roleCode: string
     }
   } catch { /* fall through to code defaults */ }
   return { visibleModuleCodes: codeVisible, actions: codeActions, readScope: codeScope, fieldAccess: codeFields }
+}
+
+// ---- 選單群組 + 完整 module 清單 (code 預設 MODULES + DB 自訂表單合併) ----
+export interface MenuGroup { code: string; name: string; sortOrder: number }
+const DEFAULT_GROUP_ORDER = ['我的工作區', '差勤', '行政 / 財務', '人資', '治理 / 系統']
+
+// sidebar 群組順序：DB menu_groups 優先 → fallback code 預設 5 大類
+export async function getMenuGroups(companyId: number): Promise<string[]> {
+  try {
+    const { data } = await svc().from('menu_groups').select('name, sort_order').eq('company_id', companyId).order('sort_order', { ascending: true })
+    if (data && data.length > 0) return data.map(g => g.name)
+  } catch { /* fall through */ }
+  return DEFAULT_GROUP_ORDER
+}
+
+// 完整 module 清單：code 預設 MODULES + DB form_definitions 自訂表單 (不在 MODULES code 的)
+export async function getEffectiveModules(companyId: number): Promise<Module[]> {
+  try {
+    const [formRes, grpRes] = await Promise.all([
+      svc().from('form_definitions')
+        .select('module_code, name, icon, group_code, group_name, chain_code, fields_json, columns_json, is_active')
+        .eq('company_id', companyId).eq('is_active', true),
+      svc().from('menu_groups').select('code, name').eq('company_id', companyId),
+    ])
+    const groupNameByCode: Record<string, string> = {}
+    for (const g of (grpRes.data || [])) groupNameByCode[g.code] = g.name
+    const custom: Module[] = []
+    for (const f of (formRes.data || [])) {
+      if (MODULE_MAP[f.module_code]) continue // 既有 module 不重複 (DB 只覆寫欄位由 resolveFormFields 處理)
+      custom.push({
+        code: f.module_code,
+        name: f.name,
+        icon: f.icon || 'document-text',
+        group: (f.group_code && groupNameByCode[f.group_code]) || f.group_name || '其他',
+        kind: 'request',
+        chain: f.chain_code || undefined,
+        fields: Array.isArray(f.fields_json) ? (f.fields_json as ModuleField[]) : [],
+        columns: Array.isArray(f.columns_json) && f.columns_json.length ? (f.columns_json as ModuleColumn[]) : undefined,
+        roles_visible: '*', // 實際可見性由 role_permissions 控 (resolveRolePermissions)
+      } as Module)
+    }
+    return [...MODULES, ...custom]
+  } catch {
+    return MODULES // DB 出錯不破壞：fallback code 預設
+  }
 }

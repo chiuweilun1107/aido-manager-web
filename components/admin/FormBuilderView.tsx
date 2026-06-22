@@ -20,9 +20,16 @@ interface FormDef {
   chain_code: string | null
   icon: string | null
   group_name: string | null
+  group_code: string | null
+  visible_roles: string[] | null
   sort_order: number
   created_at: string
   updated_at: string
+}
+
+interface MenuGroup {
+  code: string
+  name: string
 }
 
 interface NewFormDraft {
@@ -30,8 +37,10 @@ interface NewFormDraft {
   form_code: string
   name: string
   icon: string
+  group_code: string
   group_name: string
   chain_code: string
+  visible_roles: string[]
 }
 
 // ──────────────────────────────────────────────
@@ -52,6 +61,19 @@ const FIELD_TYPES: { value: FieldType; label: string }[] = [
 const CHAIN_OPTIONS = Object.keys(CHAINS)
 
 const EMPTY_FIELD = (): ModuleField => ({ key: '', label: '', type: 'text', required: false })
+
+// 9 個固定角色
+const ROLE_OPTIONS: { code: string; label: string }[] = [
+  { code: 'employee',      label: '一般職員' },
+  { code: 'manager',       label: '主管' },
+  { code: 'hr',            label: 'HR' },
+  { code: 'it',            label: 'IT' },
+  { code: 'finance',       label: '財務' },
+  { code: 'executive',     label: '經營者' },
+  { code: 'admin_officer', label: '行政' },
+  { code: 'legal',         label: '法務' },
+  { code: 'auditor',       label: '稽核' },
+]
 
 const inputStyle: React.CSSProperties = {
   background: 'var(--bg)',
@@ -301,6 +323,7 @@ function FormPreview({ fields }: { fields: ModuleField[] }) {
 // ──────────────────────────────────────────────
 export default function FormBuilderView({ user: _user }: { user: SessionUser }) {
   const [forms, setForms] = useState<FormDef[]>([])
+  const [menuGroups, setMenuGroups] = useState<MenuGroup[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [editFields, setEditFields] = useState<ModuleField[]>([])
@@ -310,7 +333,7 @@ export default function FormBuilderView({ user: _user }: { user: SessionUser }) 
   const [successMsg, setSuccessMsg] = useState('')
   const [showNewForm, setShowNewForm] = useState(false)
   const [newDraft, setNewDraft] = useState<NewFormDraft>({
-    module_code: '', form_code: '', name: '', icon: '', group_name: '', chain_code: '',
+    module_code: '', form_code: '', name: '', icon: '', group_code: '', group_name: '', chain_code: '', visible_roles: [],
   })
   const [showPreview, setShowPreview] = useState(false)
 
@@ -328,7 +351,19 @@ export default function FormBuilderView({ user: _user }: { user: SessionUser }) 
     }
   }, [])
 
-  useEffect(() => { loadForms() }, [loadForms])
+  // ── 讀取 menu_groups ──
+  const loadMenuGroups = useCallback(async () => {
+    try {
+      const res = await fetch('/api/admin/menu-groups')
+      const data = await res.json()
+      setMenuGroups(data.groups ?? [])
+    } catch (e) {
+      // 群組下拉顯示空清單；記錄 console 方便排查（不阻斷 UI）
+      console.error('載入群組失敗', e)
+    }
+  }, [])
+
+  useEffect(() => { loadForms(); loadMenuGroups() }, [loadForms, loadMenuGroups])
 
   // ── 選中表單 ──
   function selectForm(f: FormDef) {
@@ -338,6 +373,8 @@ export default function FormBuilderView({ user: _user }: { user: SessionUser }) 
       name: f.name,
       icon: f.icon ?? '',
       group_name: f.group_name ?? '',
+      group_code: f.group_code ?? '',
+      visible_roles: f.visible_roles ?? [],
       chain_code: f.chain_code ?? '',
       is_active: f.is_active,
       module_code: f.module_code,
@@ -376,6 +413,8 @@ export default function FormBuilderView({ user: _user }: { user: SessionUser }) 
     if (!selectedId) return
     setErrMsg(''); setSuccessMsg(''); setSaving(true)
     try {
+      // group_code 變動時同步 group_name
+      const selectedGroup = menuGroups.find(g => g.code === (editMeta.group_code ?? ''))
       const res = await fetch('/api/admin/forms', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -383,7 +422,9 @@ export default function FormBuilderView({ user: _user }: { user: SessionUser }) 
           id: selectedId,
           name: editMeta.name,
           icon: editMeta.icon || null,
-          group_name: editMeta.group_name || null,
+          group_code: editMeta.group_code || null,
+          group_name: selectedGroup ? selectedGroup.name : (editMeta.group_name || null),
+          visible_roles: (editMeta.visible_roles && editMeta.visible_roles.length > 0) ? editMeta.visible_roles : null,
           chain_code: editMeta.chain_code || null,
           is_active: editMeta.is_active,
           fields_json: editFields,
@@ -391,7 +432,7 @@ export default function FormBuilderView({ user: _user }: { user: SessionUser }) 
       })
       const data = await res.json()
       if (!res.ok) { setErrMsg(data.error || '儲存失敗'); return }
-      setSuccessMsg('已儲存')
+      if (data.warning) { setErrMsg(data.warning) } else { setSuccessMsg('已儲存') }
       await loadForms()
       setTimeout(() => setSuccessMsg(''), 2500)
     } catch {
@@ -409,6 +450,7 @@ export default function FormBuilderView({ user: _user }: { user: SessionUser }) 
     }
     setSaving(true); setErrMsg('')
     try {
+      const selectedGroup = menuGroups.find(g => g.code === newDraft.group_code)
       const res = await fetch('/api/admin/forms', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -417,16 +459,19 @@ export default function FormBuilderView({ user: _user }: { user: SessionUser }) 
           form_code: newDraft.form_code,
           name: newDraft.name,
           icon: newDraft.icon || null,
-          group_name: newDraft.group_name || null,
+          group_code: newDraft.group_code || null,
+          group_name: selectedGroup ? selectedGroup.name : (newDraft.group_name || null),
+          visible_roles: newDraft.visible_roles.length > 0 ? newDraft.visible_roles : null,
           chain_code: newDraft.chain_code || null,
         }),
       })
       const data = await res.json()
       if (!res.ok) { setErrMsg(data.error || '新增失敗'); return }
       setShowNewForm(false)
-      setNewDraft({ module_code: '', form_code: '', name: '', icon: '', group_name: '', chain_code: '' })
+      setNewDraft({ module_code: '', form_code: '', name: '', icon: '', group_code: '', group_name: '', chain_code: '', visible_roles: [] })
       await loadForms()
       if (data.form) selectForm(data.form)
+      if (data.warning) setErrMsg(data.warning)
     } catch {
       setErrMsg('新增失敗')
     } finally {
@@ -500,8 +545,11 @@ export default function FormBuilderView({ user: _user }: { user: SessionUser }) 
             </div>
             <div>
               <label style={labelStyle}>群組 / 分類</label>
-              <input style={inputStyle} value={newDraft.group_name} placeholder="e.g. 差勤"
-                onChange={e => setNewDraft(d => ({ ...d, group_name: e.target.value }))} />
+              <select style={inputStyle} value={newDraft.group_code}
+                onChange={e => setNewDraft(d => ({ ...d, group_code: e.target.value }))}>
+                <option value="">不分類</option>
+                {menuGroups.map(g => <option key={g.code} value={g.code}>{g.name}</option>)}
+              </select>
             </div>
             <div>
               <label style={labelStyle}>綁定簽核流程</label>
@@ -510,6 +558,29 @@ export default function FormBuilderView({ user: _user }: { user: SessionUser }) 
                 <option value="">不綁定</option>
                 {CHAIN_OPTIONS.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
+            </div>
+          </div>
+          {/* 可見角色 */}
+          <div style={{ marginTop: '14px' }}>
+            <label style={labelStyle}>可見角色（空 = 全部可見）</label>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px 18px', marginTop: '6px' }}>
+              {ROLE_OPTIONS.map(r => (
+                <label key={r.code} style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '13px', color: 'var(--text-muted)', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={newDraft.visible_roles.includes(r.code)}
+                    onChange={e => {
+                      setNewDraft(d => ({
+                        ...d,
+                        visible_roles: e.target.checked
+                          ? [...d.visible_roles, r.code]
+                          : d.visible_roles.filter(rc => rc !== r.code),
+                      }))
+                    }}
+                  />
+                  {r.label}
+                </label>
+              ))}
             </div>
           </div>
           {errMsg && <div style={{ marginTop: '12px', fontSize: '13px', color: '#e54d4d' }}>{errMsg}</div>}
@@ -612,9 +683,18 @@ export default function FormBuilderView({ user: _user }: { user: SessionUser }) 
                       onChange={e => setEditMeta(m => ({ ...m, icon: e.target.value }))} />
                   </div>
                   <div>
-                    <label style={labelStyle}>群組</label>
-                    <input style={inputStyle} value={editMeta.group_name ?? ''}
-                      onChange={e => setEditMeta(m => ({ ...m, group_name: e.target.value }))} />
+                    <label style={labelStyle}>群組 / 分類</label>
+                    <select style={inputStyle} value={editMeta.group_code ?? ''}
+                      onChange={e => setEditMeta(m => ({ ...m, group_code: e.target.value }))}>
+                      <option value="">不分類</option>
+                      {menuGroups.map(g => <option key={g.code} value={g.code}>{g.name}</option>)}
+                    </select>
+                    {/* 相容顯示：尚無 group_code 但有舊 group_name */}
+                    {!editMeta.group_code && editMeta.group_name && (
+                      <div style={{ marginTop: '4px', fontSize: '11px', color: 'var(--text-faint)' }}>
+                        舊值: {editMeta.group_name}
+                      </div>
+                    )}
                   </div>
                   <div>
                     <label style={labelStyle}>綁定簽核流程</label>
@@ -632,6 +712,32 @@ export default function FormBuilderView({ user: _user }: { user: SessionUser }) 
                       onChange={e => setEditMeta(m => ({ ...m, is_active: e.target.checked }))}
                     />
                     <label htmlFor="is_active" style={{ fontSize: '13px', color: 'var(--text-muted)', cursor: 'pointer' }}>啟用</label>
+                  </div>
+                </div>
+                {/* 可見角色 */}
+                <div style={{ marginTop: '14px', paddingTop: '14px', borderTop: '1px solid var(--border)' }}>
+                  <label style={labelStyle}>可見角色（空 = 全部可見）</label>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px 18px', marginTop: '6px' }}>
+                    {ROLE_OPTIONS.map(r => (
+                      <label key={r.code} style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '13px', color: 'var(--text-muted)', cursor: 'pointer' }}>
+                        <input
+                          type="checkbox"
+                          checked={(editMeta.visible_roles ?? []).includes(r.code)}
+                          onChange={e => {
+                            setEditMeta(m => {
+                              const cur = m.visible_roles ?? []
+                              return {
+                                ...m,
+                                visible_roles: e.target.checked
+                                  ? [...cur, r.code]
+                                  : cur.filter(rc => rc !== r.code),
+                              }
+                            })
+                          }}
+                        />
+                        {r.label}
+                      </label>
+                    ))}
                   </div>
                 </div>
               </div>

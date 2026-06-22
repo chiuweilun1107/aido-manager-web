@@ -596,9 +596,9 @@ export default function WorkflowDesignerView({ user: _user }: { user: SessionUse
           <div style={{ ...card, padding: '14px 16px', color: 'var(--danger, #e53e3e)', fontSize: '13px', marginBottom: '16px' }}>{fetchErr}</div>
         )}
 
-        <div className="wf-layout" style={{ display: 'flex', gap: 0, ...card, overflow: 'hidden' }}>
+        <div className="wf-layout" style={{ display: 'flex', gap: '20px', alignItems: 'flex-start' }}>
           {/* ── Left Panel: flow list ── */}
-          <div className="wf-left" style={{ width: '280px', flexShrink: 0, borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column' }}>
+          <div className="wf-left" style={{ width: '280px', flexShrink: 0, ...card, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
             <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <span style={{ ...sectionTitle }}>流程清單</span>
               <button onClick={() => setShowNew(true)} style={{ ...btnPrimary, padding: '5px 10px', fontSize: '12px' }}>
@@ -671,7 +671,7 @@ export default function WorkflowDesignerView({ user: _user }: { user: SessionUse
           </div>
 
           {/* ── Right Panel: step editor ── */}
-          <div className="wf-pane" style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+          <div className="wf-pane" style={{ flex: 1, ...card, display: 'flex', flexDirection: 'column', minWidth: 0, alignSelf: 'stretch', minHeight: '420px' }}>
             {!selected ? (
               <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-faint)', fontSize: '13px' }}>
                 ← 從左側選擇一個流程開始編輯

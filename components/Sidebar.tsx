@@ -2,7 +2,8 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { visibleModules, MODULES } from '@/lib/modules'
+import { visibleModules } from '@/lib/modules'
+import type { Module } from '@/lib/modules'
 import { ROLE_LABELS } from '@/lib/rbac'
 import Icon from '@/components/Icon'
 
@@ -53,12 +54,10 @@ function NavItem({ href, icon, label, active, collapsed }: {
   )
 }
 
-export default function Sidebar({ roleCode, visibleCodes }: { roleCode: string; visibleCodes?: string[] }) {
+export default function Sidebar({ roleCode, modules: modulesProp, groupOrder }: { roleCode: string; modules?: Module[]; groupOrder?: string[] }) {
   const pathname = usePathname()
-  // 權限管理編輯結果 (DB) 優先決定 sidebar 可見項；無則 fallback code roles_visible
-  const modules = visibleCodes && visibleCodes.length
-    ? MODULES.filter(m => visibleCodes.includes(m.code))
-    : visibleModules(roleCode)
+  // 完整 module 清單(含自訂表單)由 layout 算好傳入(已依權限 visible filtered)；無則 fallback code
+  const modules = modulesProp && modulesProp.length ? modulesProp : visibleModules(roleCode)
   const [collapsed, setCollapsed] = useState(false)
   const [closedGroups, setClosedGroups] = useState<Set<string>>(new Set())
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -145,7 +144,7 @@ export default function Sidebar({ roleCode, visibleCodes }: { roleCode: string; 
         <NavItem href="/dashboard" icon="chart-bar-square" label="首頁總覽"
           active={pathname === '/dashboard'} collapsed={collapsed} />
 
-        {GROUP_ORDER.filter(g => groups[g]?.length).map(g => (
+        {[...(groupOrder ?? GROUP_ORDER), ...Object.keys(groups).filter(g => !(groupOrder ?? GROUP_ORDER).includes(g))].filter(g => groups[g]?.length).map(g => (
           <div key={g}>
             {!collapsed ? (
               <button

@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useRef, FormEvent } from 'react'
+import { useState, useEffect, FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
 
 const DEMO_ACCOUNTS = [
@@ -21,7 +21,6 @@ const CAPABILITIES = [
 ]
 
 const LS_CREDS = 'aido_login'
-const LS_AUTO = 'aido_autologin'
 function loadCreds(): { email: string; password: string } | null {
   try {
     const raw = localStorage.getItem(LS_CREDS)
@@ -39,18 +38,17 @@ export default function LoginPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const router = useRouter()
-  const autoTried = useRef(false)
 
-  async function doLogin(e: string, p: string, isAuto = false, persistOverride?: boolean) {
+  async function doLogin(e: string, p: string, persistOverride?: boolean) {
     setLoading(true); setError('')
     try {
       const { createClient } = await import('@/lib/supabase/client')
       const supabase = createClient()
       const { error: authError } = await supabase.auth.signInWithPassword({ email: e, password: p })
-      if (authError) { setError(authError.message); if (isAuto) localStorage.removeItem(LS_AUTO); return }
+      if (authError) { setError(authError.message); return }
       const persist = persistOverride ?? remember
-      if (persist) { localStorage.setItem(LS_CREDS, btoa(encodeURIComponent(JSON.stringify({ email: e, password: p })))); localStorage.setItem(LS_AUTO, '1') }
-      else { localStorage.removeItem(LS_CREDS); localStorage.removeItem(LS_AUTO) }
+      if (persist) { localStorage.setItem(LS_CREDS, btoa(encodeURIComponent(JSON.stringify({ email: e, password: p })))) }
+      else { localStorage.removeItem(LS_CREDS) }
       router.push('/dashboard'); router.refresh()
     } catch { setError('登入失敗，請稍後再試') } finally { setLoading(false) }
   }
@@ -58,14 +56,11 @@ export default function LoginPage() {
   useEffect(() => {
     const saved = loadCreds()
     if (saved) { setEmail(saved.email); setPwd(saved.password); setRemember(true) }
-    if (localStorage.getItem(LS_AUTO) === '1' && saved && !autoTried.current) {
-      autoTried.current = true
-      doLogin(saved.email, saved.password, true)
-    }
+    // 只自動填入帳號密碼，不自動登入；使用者需手動按登入
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   function handleSubmit(ev: FormEvent) { ev.preventDefault(); doLogin(email, pwd) }
-  function loginAs(acc: typeof DEMO_ACCOUNTS[0]) { setEmail(acc.email); setPwd(acc.pwd); doLogin(acc.email, acc.pwd, false, false) }
+  function loginAs(acc: typeof DEMO_ACCOUNTS[0]) { setEmail(acc.email); setPwd(acc.pwd); doLogin(acc.email, acc.pwd, false) }
 
   const inputStyle: React.CSSProperties = {
     width: '100%', background: 'var(--bg)', border: '1px solid var(--border)',
@@ -178,8 +173,8 @@ export default function LoginPage() {
                   </div>
                 </div>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px', fontSize: '13px', color: 'var(--text-muted)', cursor: 'pointer' }}>
-                  <input type="checkbox" checked={remember} onChange={e => { setRemember(e.target.checked); if (!e.target.checked) { localStorage.removeItem(LS_CREDS); localStorage.removeItem(LS_AUTO) } }} />
-                  記住帳號密碼，下次自動登入
+                  <input type="checkbox" checked={remember} onChange={e => { setRemember(e.target.checked); if (!e.target.checked) { localStorage.removeItem(LS_CREDS) } }} />
+                  記住帳號密碼，下次自動填入
                 </label>
                 <button type="submit" disabled={loading}
                   style={{ width: '100%', background: loading ? 'var(--primary-hover)' : 'var(--primary)', color: '#fff', border: 'none', borderRadius: 'var(--radius)', padding: '11px', fontSize: '14px', fontWeight: 600, cursor: loading ? 'not-allowed' : 'pointer', letterSpacing: '-0.01em', transition: 'background 0.15s ease' }}>

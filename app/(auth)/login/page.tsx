@@ -1,5 +1,5 @@
 'use client'
-import { useState, FormEvent } from 'react'
+import { useState, useEffect, useRef, FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
 
 const DEMO_ACCOUNTS = [
@@ -20,23 +20,49 @@ const CAPABILITIES = [
   { t: 'Audit Trail', d: '全程可追蹤稽核紀錄' },
 ]
 
+const LS_CREDS = 'aido_login'
+const LS_AUTO = 'aido_autologin'
+function loadCreds(): { email: string; password: string } | null {
+  try {
+    const raw = localStorage.getItem(LS_CREDS)
+    if (!raw) return null
+    const o = JSON.parse(atob(raw))
+    return typeof o?.email === 'string' && typeof o?.password === 'string' ? o : null
+  } catch { return null }
+}
+
 export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [pwd, setPwd] = useState('')
+  const [showPwd, setShowPwd] = useState(false)
+  const [remember, setRemember] = useState(true)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const router = useRouter()
+  const autoTried = useRef(false)
 
-  async function doLogin(e: string, p: string) {
+  async function doLogin(e: string, p: string, isAuto = false) {
     setLoading(true); setError('')
     try {
       const { createClient } = await import('@/lib/supabase/client')
       const supabase = createClient()
       const { error: authError } = await supabase.auth.signInWithPassword({ email: e, password: p })
-      if (authError) { setError(authError.message); return }
+      if (authError) { setError(authError.message); if (isAuto) localStorage.removeItem(LS_AUTO); return }
+      if (remember) { localStorage.setItem(LS_CREDS, btoa(JSON.stringify({ email: e, password: p }))); localStorage.setItem(LS_AUTO, '1') }
+      else { localStorage.removeItem(LS_CREDS); localStorage.removeItem(LS_AUTO) }
       router.push('/dashboard'); router.refresh()
     } catch { setError('登入失敗，請稍後再試') } finally { setLoading(false) }
   }
+
+  useEffect(() => {
+    const saved = loadCreds()
+    if (saved) { setEmail(saved.email); setPwd(saved.password); setRemember(true) }
+    if (localStorage.getItem(LS_AUTO) === '1' && saved && !autoTried.current) {
+      autoTried.current = true
+      doLogin(saved.email, saved.password, true)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   function handleSubmit(ev: FormEvent) { ev.preventDefault(); doLogin(email, pwd) }
   function loginAs(acc: typeof DEMO_ACCOUNTS[0]) { setEmail(acc.email); setPwd(acc.pwd); doLogin(acc.email, acc.pwd) }
 
@@ -136,14 +162,24 @@ export default function LoginPage() {
               <form onSubmit={handleSubmit}>
                 <div style={{ marginBottom: '14px' }}>
                   <div className="label-mono" style={{ marginBottom: '6px' }}>電子郵件</div>
-                  <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="user@aido.demo" required style={inputStyle}
+                  <input type="email" id="email" name="email" autoComplete="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="user@aido.demo" required style={inputStyle}
                     onFocus={e => (e.target.style.borderColor = 'var(--primary)')} onBlur={e => (e.target.style.borderColor = 'var(--border)')} />
                 </div>
-                <div style={{ marginBottom: '18px' }}>
+                <div style={{ marginBottom: '14px' }}>
                   <div className="label-mono" style={{ marginBottom: '6px' }}>密碼</div>
-                  <input type="password" value={pwd} onChange={e => setPwd(e.target.value)} placeholder="••••••••" required style={inputStyle}
-                    onFocus={e => (e.target.style.borderColor = 'var(--primary)')} onBlur={e => (e.target.style.borderColor = 'var(--border)')} />
+                  <div style={{ position: 'relative' }}>
+                    <input type={showPwd ? 'text' : 'password'} id="password" name="password" autoComplete="current-password" value={pwd} onChange={e => setPwd(e.target.value)} placeholder="••••••••" required style={{ ...inputStyle, paddingRight: '56px' }}
+                      onFocus={e => (e.target.style.borderColor = 'var(--primary)')} onBlur={e => (e.target.style.borderColor = 'var(--border)')} />
+                    <button type="button" onClick={() => setShowPwd(s => !s)} tabIndex={-1}
+                      style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-faint)', fontSize: '12px', cursor: 'pointer', padding: '4px 6px' }}>
+                      {showPwd ? '隱藏' : '顯示'}
+                    </button>
+                  </div>
                 </div>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px', fontSize: '13px', color: 'var(--text-muted)', cursor: 'pointer' }}>
+                  <input type="checkbox" checked={remember} onChange={e => setRemember(e.target.checked)} />
+                  記住帳號密碼，下次自動登入
+                </label>
                 <button type="submit" disabled={loading}
                   style={{ width: '100%', background: loading ? 'var(--primary-hover)' : 'var(--primary)', color: '#fff', border: 'none', borderRadius: 'var(--radius)', padding: '11px', fontSize: '14px', fontWeight: 600, cursor: loading ? 'not-allowed' : 'pointer', letterSpacing: '-0.01em', transition: 'background 0.15s ease' }}>
                   {loading ? '登入中…' : '登入'}

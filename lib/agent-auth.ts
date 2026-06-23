@@ -31,7 +31,7 @@ export function corsHeaders(req: NextRequest): Record<string, string> {
   const origin = req.headers.get('origin') || '*'
   return {
     'Access-Control-Allow-Origin': origin,
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, POST, PATCH, OPTIONS',
     'Access-Control-Allow-Headers': 'authorization, content-type',
     'Access-Control-Max-Age': '86400',
     'Vary': 'Origin',

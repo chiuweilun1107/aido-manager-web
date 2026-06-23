@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/server'
+import { listNotifications, markNotificationsRead } from '@/lib/self-service'
 
 export async function GET() {
   const supabase = await createClient()
@@ -11,10 +12,7 @@ export async function GET() {
   const { data: aiDoUser } = await svc.schema('aido').from('users').select('id').eq('auth_user_id', user.id).single()
   if (!aiDoUser) return NextResponse.json({ notifications: [] })
 
-  const { data } = await svc.schema('aido').from('notifications')
-    .select('*').eq('user_id', aiDoUser.id).order('created_at', { ascending: false }).limit(50)
-
-  return NextResponse.json({ notifications: data || [] })
+  return NextResponse.json({ notifications: await listNotifications(svc, aiDoUser) })
 }
 
 export async function PATCH(req: NextRequest) {
@@ -27,12 +25,6 @@ export async function PATCH(req: NextRequest) {
   if (!aiDoUser) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   const { ids } = await req.json()
-  if (ids && Array.isArray(ids)) {
-    await svc.schema('aido').from('notifications').update({ read_at: new Date().toISOString() })
-      .in('id', ids).eq('user_id', aiDoUser.id)
-  } else {
-    await svc.schema('aido').from('notifications').update({ read_at: new Date().toISOString() })
-      .eq('user_id', aiDoUser.id).is('read_at', null)
-  }
+  await markNotificationsRead(svc, aiDoUser, ids)
   return NextResponse.json({ ok: true })
 }

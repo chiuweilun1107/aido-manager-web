@@ -5,6 +5,7 @@ import { notFound } from 'next/navigation'
 import type { ComponentType } from 'react'
 import ModuleView from '@/components/ModuleView'
 import BIView from '@/components/BIView'
+import ApprovalsView from '@/components/ApprovalsView'
 import OrgView from '@/components/admin/OrgView'
 import DirectoryView from '@/components/admin/DirectoryView'
 import HrmView from '@/components/admin/HrmView'
@@ -22,6 +23,7 @@ const VIEW_MAP: Record<string, ComponentType<{ user: SessionUser }>> = {
   forms: FormBuilderView,
   workflows: WorkflowDesignerView,
   'menu-groups': MenuGroupsView,
+  approvals: ApprovalsView,
 }
 
 export default async function ModulePage({ params }: { params: Promise<{ code: string }> }) {

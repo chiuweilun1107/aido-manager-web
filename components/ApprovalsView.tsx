@@ -40,9 +40,10 @@ export default function ApprovalsView({ user }: { user: SessionUser }) {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await fetch(`/api/approvals?tab=${tab}`)
+      const res = await fetch('/api/approvals')
       const data = await res.json()
-      setItems(Array.isArray(data) ? data : data.items || [])
+      // API 回 { pending, my_requests }；依分頁取對應清單
+      setItems(tab === 'pending' ? (data.pending || []) : (data.my_requests || []))
     } catch {
       setItems([])
     } finally {

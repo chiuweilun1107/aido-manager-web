@@ -10,10 +10,10 @@ function requireAdmin(roleCode: string) {
 }
 
 // GET /api/admin/org — 列出全部部門 + 各部門成員數
+// 唯讀：組織架構對全公司開放檢視（org module 對所有角色 visible），
+// 故不擋讀，僅以 company_id 鎖租戶。寫入(POST/PUT/DELETE)仍需 admin。
 export async function GET() {
   const user = await getSessionUser()
-  const denied = requireAdmin(user.roleCode)
-  if (denied) return denied
   const db = createServiceClient().schema('aido')
 
   const { data: depts, error } = await db

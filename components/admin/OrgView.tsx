@@ -2,6 +2,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import type { SessionUser } from '@/lib/types'
+import { isAdminRole } from '@/lib/rbac'
 
 interface Department {
   id: number
@@ -133,6 +134,8 @@ function DeptRow({
   allDepts,
   expanded,
   memberState,
+  canManage,
+  colCount,
   onToggle,
   onEdit,
   onDelete,
@@ -142,6 +145,8 @@ function DeptRow({
   allDepts: Department[]
   expanded: Set<number>
   memberState: Record<number, MemberState>
+  canManage: boolean
+  colCount: number
   onToggle: (d: Department) => void
   onEdit: (d: Department) => void
   onDelete: (d: Department) => void
@@ -172,22 +177,24 @@ function DeptRow({
         <td style={{ padding: '10px 16px', color: 'var(--text-muted)', fontSize: '12px' }}>
           {dept.cost_center ?? <span style={{ color: 'var(--text-faint)' }}>—</span>}
         </td>
-        <td style={{ padding: '10px 16px' }}>
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <button onClick={() => onEdit(dept)} style={{ ...ghostBtn, padding: '4px 10px', fontSize: '12px' }}>編輯</button>
-            <button onClick={() => onDelete(dept)} style={{ ...ghostBtn, padding: '4px 10px', fontSize: '12px', color: 'var(--danger, #e53e3e)', borderColor: 'var(--danger, #e53e3e)' }}>刪除</button>
-          </div>
-        </td>
+        {canManage && (
+          <td style={{ padding: '10px 16px' }}>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button onClick={() => onEdit(dept)} style={{ ...ghostBtn, padding: '4px 10px', fontSize: '12px' }}>編輯</button>
+              <button onClick={() => onDelete(dept)} style={{ ...ghostBtn, padding: '4px 10px', fontSize: '12px', color: 'var(--danger, #e53e3e)', borderColor: 'var(--danger, #e53e3e)' }}>刪除</button>
+            </div>
+          </td>
+        )}
       </tr>
       {isExpanded && (
         <tr style={{ background: 'var(--surface-2)' }}>
-          <td colSpan={5} style={{ padding: 0 }}>
+          <td colSpan={colCount} style={{ padding: 0 }}>
             <MemberPanel state={memberState[dept.id]} depth={depth} />
           </td>
         </tr>
       )}
       {dept.children.map(child => (
-        <DeptRow key={child.id} dept={child as Department & { children: Department[] }} depth={depth + 1} allDepts={allDepts} expanded={expanded} memberState={memberState} onToggle={onToggle} onEdit={onEdit} onDelete={onDelete} />
+        <DeptRow key={child.id} dept={child as Department & { children: Department[] }} depth={depth + 1} allDepts={allDepts} expanded={expanded} memberState={memberState} canManage={canManage} colCount={colCount} onToggle={onToggle} onEdit={onEdit} onDelete={onDelete} />
       ))}
     </>
   )
@@ -205,6 +212,9 @@ interface ModalForm {
 const emptyForm = (): ModalForm => ({ name: '', code: '', parent_id: '', manager_user_id: '', sort_order: '0', cost_center: '' })
 
 export default function OrgView({ user }: { user: SessionUser }) {
+  // 有 admin 寫入權限才顯示新增/編輯/刪除（與後端 org 寫入守衛同一判斷）。
+  // 無權限者仍可正常檢視部門與成員（read-only）。
+  const canManage = isAdminRole(user.roleCode)
   const [depts, setDepts] = useState<Department[]>([])
   const [users, setUsers] = useState<UserOption[]>([])
   const [loading, setLoading] = useState(true)
@@ -283,9 +293,10 @@ export default function OrgView({ user }: { user: SessionUser }) {
     mountedRef.current = true
     const ac = new AbortController()
     fetchDepts(ac.signal)
-    fetchUsers(ac.signal)
+    // 員工清單僅供新增/編輯 modal 的主管下拉用 → 無管理權限不需抓（且該端點會擋）
+    if (canManage) fetchUsers(ac.signal)
     return () => { mountedRef.current = false; ac.abort() }
-  }, [fetchDepts, fetchUsers])
+  }, [fetchDepts, fetchUsers, canManage])
 
   function openAdd() {
     setEditTarget(null)
@@ -354,6 +365,8 @@ export default function OrgView({ user }: { user: SessionUser }) {
   }
 
   const tree = buildTree(depts)
+  const columns = canManage ? ['部門名稱', '主管', '人數', '成本中心', '操作'] : ['部門名稱', '主管', '人數', '成本中心']
+  const colCount = columns.length
 
   return (
     <div style={{ maxWidth: '960px', margin: '0 auto' }}>
@@ -362,7 +375,7 @@ export default function OrgView({ user }: { user: SessionUser }) {
           <h1 style={{ fontSize: '20px', fontWeight: 600, color: 'var(--text)', margin: 0, letterSpacing: '-0.02em' }}>組織架構</h1>
           <span className="label-mono" style={{ display: 'block', marginTop: '4px' }}>DEPARTMENTS</span>
         </div>
-        <button onClick={openAdd} style={primaryBtn}>+ 新增部門</button>
+        {canManage && <button onClick={openAdd} style={primaryBtn}>+ 新增部門</button>}
       </div>
 
       {errMsg && (
@@ -374,20 +387,20 @@ export default function OrgView({ user }: { user: SessionUser }) {
           <table style={{ width: '100%', fontSize: '13px', borderCollapse: 'collapse', minWidth: '600px' }}>
             <thead>
               <tr style={{ background: 'var(--surface-2)' }}>
-                {['部門名稱', '主管', '人數', '成本中心', '操作'].map(h => (
+                {columns.map(h => (
                   <th key={h} className="label-mono" style={{ padding: '9px 16px', textAlign: 'left', whiteSpace: 'nowrap' }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {loading && (
-                <tr><td colSpan={5} style={{ padding: '32px', textAlign: 'center', color: 'var(--text-faint)' }}>載入中…</td></tr>
+                <tr><td colSpan={colCount} style={{ padding: '32px', textAlign: 'center', color: 'var(--text-faint)' }}>載入中…</td></tr>
               )}
               {!loading && depts.length === 0 && (
-                <tr><td colSpan={5} style={{ padding: '32px', textAlign: 'center', color: 'var(--text-faint)' }}>尚無部門資料</td></tr>
+                <tr><td colSpan={colCount} style={{ padding: '32px', textAlign: 'center', color: 'var(--text-faint)' }}>尚無部門資料</td></tr>
               )}
               {!loading && tree.map(d => (
-                <DeptRow key={d.id} dept={d} depth={0} allDepts={depts} expanded={expanded} memberState={memberState} onToggle={toggleExpand} onEdit={openEdit} onDelete={handleDelete} />
+                <DeptRow key={d.id} dept={d} depth={0} allDepts={depts} expanded={expanded} memberState={memberState} canManage={canManage} colCount={colCount} onToggle={toggleExpand} onEdit={openEdit} onDelete={handleDelete} />
               ))}
             </tbody>
           </table>

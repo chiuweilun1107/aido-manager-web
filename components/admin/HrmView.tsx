@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState, useCallback, useRef } from 'react'
 import type { SessionUser } from '@/lib/types'
+import { isAdminRole } from '@/lib/rbac'
 
 interface Employee {
   id: number
@@ -94,7 +95,10 @@ const emptyEmpForm = (): EmpForm => ({
 interface PosForm { code: string; title: string; grade: string; job_family: string; is_manager: boolean; status: string }
 const emptyPosForm = (): PosForm => ({ code: '', title: '', grade: '', job_family: '', is_manager: false, status: 'active' })
 
-export default function HrmView({ user: _user }: { user: SessionUser }) {
+export default function HrmView({ user }: { user: SessionUser }) {
+  // 有 admin 寫入權限才顯示新增/編輯（與後端寫入守衛同一判斷）。
+  // 稽核 auditor / 主管 manager 為唯讀（manager 的可見資料已由後端限縮成同部門）。
+  const canManage = isAdminRole(user.roleCode)
   const [employees, setEmployees] = useState<Employee[]>([])
   const [depts, setDepts] = useState<Department[]>([])
   const [positions, setPositions] = useState<Position[]>([])
@@ -306,6 +310,15 @@ export default function HrmView({ user: _user }: { user: SessionUser }) {
     return true
   })
 
+  const empColumns = canManage
+    ? ['工號', '姓名', '部門', '職位', '角色', '主管', '狀態', '操作']
+    : ['工號', '姓名', '部門', '職位', '角色', '主管', '狀態']
+  const empColCount = empColumns.length
+  const posColumns = canManage
+    ? ['職位代碼', '職位名稱', '職等', '職系', '是否主管職', '狀態', '操作']
+    : ['職位代碼', '職位名稱', '職等', '職系', '是否主管職', '狀態']
+  const posColCount = posColumns.length
+
   return (
     <div style={{ maxWidth: '1100px', margin: '0 auto' }}>
       {/* ── 員工管理 ── */}
@@ -314,7 +327,7 @@ export default function HrmView({ user: _user }: { user: SessionUser }) {
           <h1 style={{ fontSize: '20px', fontWeight: 600, color: 'var(--text)', margin: 0, letterSpacing: '-0.02em' }}>員工管理</h1>
           <span className="label-mono" style={{ display: 'block', marginTop: '4px' }}>HUMAN RESOURCES</span>
         </div>
-        <button onClick={openAddEmp} style={primaryBtn}>+ 新增員工</button>
+        {canManage && <button onClick={openAddEmp} style={primaryBtn}>+ 新增員工</button>}
       </div>
 
       {errMsg && (
@@ -345,17 +358,17 @@ export default function HrmView({ user: _user }: { user: SessionUser }) {
           <table style={{ width: '100%', fontSize: '13px', borderCollapse: 'collapse', minWidth: '800px' }}>
             <thead>
               <tr style={{ background: 'var(--surface-2)' }}>
-                {['工號', '姓名', '部門', '職位', '角色', '主管', '狀態', '操作'].map(h => (
+                {empColumns.map(h => (
                   <th key={h} className="label-mono" style={{ padding: '9px 16px', textAlign: 'left', whiteSpace: 'nowrap' }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {loadingEmp && (
-                <tr><td colSpan={8} style={{ padding: '32px', textAlign: 'center', color: 'var(--text-faint)' }}>載入中…</td></tr>
+                <tr><td colSpan={empColCount} style={{ padding: '32px', textAlign: 'center', color: 'var(--text-faint)' }}>載入中…</td></tr>
               )}
               {!loadingEmp && filtered.length === 0 && (
-                <tr><td colSpan={8} style={{ padding: '32px', textAlign: 'center', color: 'var(--text-faint)' }}>尚無員工資料</td></tr>
+                <tr><td colSpan={empColCount} style={{ padding: '32px', textAlign: 'center', color: 'var(--text-faint)' }}>尚無員工資料</td></tr>
               )}
               {!loadingEmp && filtered.map(e => (
                 <tr key={e.id} style={{ borderTop: '1px solid var(--border)' }}>
@@ -390,9 +403,11 @@ export default function HrmView({ user: _user }: { user: SessionUser }) {
                       {STATUS_LABEL[e.status] ?? e.status}
                     </span>
                   </td>
-                  <td style={{ padding: '10px 16px', whiteSpace: 'nowrap' }}>
-                    <button onClick={() => openEditEmp(e)} style={{ ...ghostBtn, padding: '4px 10px', fontSize: '12px' }}>編輯</button>
-                  </td>
+                  {canManage && (
+                    <td style={{ padding: '10px 16px', whiteSpace: 'nowrap' }}>
+                      <button onClick={() => openEditEmp(e)} style={{ ...ghostBtn, padding: '4px 10px', fontSize: '12px' }}>編輯</button>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -406,7 +421,7 @@ export default function HrmView({ user: _user }: { user: SessionUser }) {
           <h2 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text)', margin: 0 }}>職位管理</h2>
           <span className="label-mono" style={{ display: 'block', marginTop: '2px' }}>POSITIONS</span>
         </div>
-        <button onClick={openAddPos} style={{ ...primaryBtn, padding: '6px 12px', fontSize: '12px' }}>+ 新增職位</button>
+        {canManage && <button onClick={openAddPos} style={{ ...primaryBtn, padding: '6px 12px', fontSize: '12px' }}>+ 新增職位</button>}
       </div>
 
       <div style={{ ...card, overflow: 'hidden' }}>
@@ -414,17 +429,17 @@ export default function HrmView({ user: _user }: { user: SessionUser }) {
           <table style={{ width: '100%', fontSize: '13px', borderCollapse: 'collapse', minWidth: '560px' }}>
             <thead>
               <tr style={{ background: 'var(--surface-2)' }}>
-                {['職位代碼', '職位名稱', '職等', '職系', '是否主管職', '狀態', '操作'].map(h => (
+                {posColumns.map(h => (
                   <th key={h} className="label-mono" style={{ padding: '9px 16px', textAlign: 'left', whiteSpace: 'nowrap' }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {loadingPos && (
-                <tr><td colSpan={7} style={{ padding: '24px', textAlign: 'center', color: 'var(--text-faint)' }}>載入中…</td></tr>
+                <tr><td colSpan={posColCount} style={{ padding: '24px', textAlign: 'center', color: 'var(--text-faint)' }}>載入中…</td></tr>
               )}
               {!loadingPos && positions.length === 0 && (
-                <tr><td colSpan={7} style={{ padding: '24px', textAlign: 'center', color: 'var(--text-faint)' }}>尚無職位資料</td></tr>
+                <tr><td colSpan={posColCount} style={{ padding: '24px', textAlign: 'center', color: 'var(--text-faint)' }}>尚無職位資料</td></tr>
               )}
               {!loadingPos && (positions as Array<Position & { code?: string | null; job_family?: string | null; is_manager?: boolean; status?: string }>).map(p => (
                 <tr key={p.id} style={{ borderTop: '1px solid var(--border)' }}>
@@ -436,9 +451,11 @@ export default function HrmView({ user: _user }: { user: SessionUser }) {
                   <td style={{ padding: '10px 16px', color: p.status === 'active' ? '#22c55e' : 'var(--text-faint)', fontWeight: 600, fontSize: '12px' }}>
                     {p.status === 'active' ? '啟用' : '停用'}
                   </td>
-                  <td style={{ padding: '10px 16px' }}>
-                    <button onClick={() => openEditPos(p)} style={{ ...ghostBtn, padding: '4px 10px', fontSize: '12px' }}>編輯</button>
-                  </td>
+                  {canManage && (
+                    <td style={{ padding: '10px 16px' }}>
+                      <button onClick={() => openEditPos(p)} style={{ ...ghostBtn, padding: '4px 10px', fontSize: '12px' }}>編輯</button>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>

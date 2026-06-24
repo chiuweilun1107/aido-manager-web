@@ -38,6 +38,29 @@ export function canAct(roleCode: string, action: Action): boolean {
   return (ROLE_ACTIONS[roleCode] || ['read']).includes(action)
 }
 
+// 可執行 admin 配置操作的角色（組織/員工/權限/表單/流程設定）。
+// 單一真實來源：api-guard.ts 與 client 元件都從此引用，避免前後端判斷漂移。
+// 不含 auditor(只讀) / employee / manager / finance(僅財務模組 manage)。
+// 標為 string[]（非窄 union）讓既有 `ADMIN_ROLES.includes(roleCode: string)`
+// 呼叫端不報型別錯；各值仍須為合法 RoleCode（見上方 RoleCode 型別）。
+export const ADMIN_ROLES: string[] = ['hr', 'it', 'executive', 'admin_officer']
+
+/** 是否為可寫入設定的管理角色（與後端 API 寫入守衛同一判斷） */
+export function isAdminRole(roleCode: string): boolean {
+  return ADMIN_ROLES.includes(roleCode)
+}
+
+// 員工/HR 主檔的「可檢視範圍」（員工管理頁的讀取分層）：
+// - admin 角色 + 稽核 auditor → 全公司(all)
+// - 主管 manager → 僅同部門全體(department，依 Allen 決策；無部門退化成只看自己)
+// - 其餘 → 無(none，API 直接擋)
+export type EmployeeViewScope = 'all' | 'department' | 'none'
+export function employeeViewScope(roleCode: string): EmployeeViewScope {
+  if (isAdminRole(roleCode) || roleCode === 'auditor') return 'all'
+  if (roleCode === 'manager') return 'department'
+  return 'none'
+}
+
 export function canSeeField(field: string, roleCode: string, isSelf: boolean): boolean {
   if (isSelf) return true
   const allowed = FIELD_FULL_ACCESS[field]

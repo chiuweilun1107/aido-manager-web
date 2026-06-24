@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
 import { getSessionUser } from '@/lib/session'
-import { ADMIN_ROLES } from '@/lib/api-guard'
+import { ADMIN_ROLES, employeeViewScope } from '@/lib/api-guard'
 
 function requireAdmin(roleCode: string) {
   return ADMIN_ROLES.includes(roleCode)
@@ -10,10 +10,13 @@ function requireAdmin(roleCode: string) {
 }
 
 // GET /api/admin/positions — 列出全部職位
+// 職位為公司層參考資料（非個人敏感）：開放給可進員工管理頁的角色讀取
+// （admin/稽核/主管），不做個人 scoping。寫入仍 admin-only。
 export async function GET() {
   const user = await getSessionUser()
-  const denied = requireAdmin(user.roleCode)
-  if (denied) return denied
+  if (employeeViewScope(user.roleCode) === 'none') {
+    return NextResponse.json({ error: '無操作權限' }, { status: 403 })
+  }
   const db = createServiceClient().schema('aido')
 
   const { data, error } = await db

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
 import { getSessionUser } from '@/lib/session'
-import { ADMIN_ROLES } from '@/lib/api-guard'
+import { ADMIN_ROLES, employeeViewScope } from '@/lib/api-guard'
 
 const VALID_STATUSES = ['active', 'inactive', 'resigned']
 function requireAdmin(roleCode: string) {
@@ -11,13 +11,15 @@ function requireAdmin(roleCode: string) {
 }
 
 // GET /api/admin/employees — 列出員工 + department/position/role 名
+// 讀取分層（寫入仍 admin-only）：
+//   admin 角色 + 稽核 → 全公司；主管 manager → 僅同部門；其餘 → 403。
 export async function GET() {
   const user = await getSessionUser()
-  const denied = requireAdmin(user.roleCode)
-  if (denied) return denied
+  const scope = employeeViewScope(user.roleCode)
+  if (scope === 'none') return NextResponse.json({ error: '無操作權限' }, { status: 403 })
   const db = createServiceClient().schema('aido')
 
-  const { data, error } = await db
+  let query = db
     .from('users')
     .select(`
       id, employee_no, email, display_name, status, auth_user_id,
@@ -28,7 +30,15 @@ export async function GET() {
       roles:primary_role_id(id, name, code)
     `)
     .eq('company_id', user.companyId)
-    .order('employee_no', { ascending: true })
+
+  // 主管只看自己部門全體；若主管未設部門則退化成只看自己（避免 department_id IS NULL 誤撈他人）
+  if (scope === 'department') {
+    query = user.departmentId != null
+      ? query.eq('department_id', user.departmentId)
+      : query.eq('id', user.id)
+  }
+
+  const { data, error } = await query.order('employee_no', { ascending: true })
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 

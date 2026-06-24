@@ -1,19 +1,11 @@
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
 import { getSessionUser } from '@/lib/session'
-import { ADMIN_ROLES } from '@/lib/api-guard'
-
-function requireAdmin(roleCode: string) {
-  return ADMIN_ROLES.includes(roleCode)
-    ? null
-    : NextResponse.json({ error: '無操作權限' }, { status: 403 })
-}
 
 // GET /api/admin/org/[id]/members — 列出某部門的在職成員（含職稱、是否為部門主管）
+// 唯讀：與 /api/admin/org GET 一致，組織架構對全公司開放檢視，僅以 company_id 鎖租戶。
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const user = await getSessionUser()
-  const denied = requireAdmin(user.roleCode)
-  if (denied) return denied
 
   const { id } = await params
   const deptId = Number(id)

@@ -7,6 +7,11 @@ import { authBearerUser, preflight, jsonCors, companyOf } from '@/lib/agent-auth
 // 鏡像 app/api/upload/route.ts，唯一差異：身分來自 Authorization Bearer JWT（authBearerUser），
 // 非 cookie session；owner/company 取自驗過的 user，service client 只在驗身分後做受 scope 限制的操作。
 
+const ALLOWED_MIME = new Set([
+  'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/heic', 'image/heif',
+  'application/pdf',
+])
+
 export async function OPTIONS(req: NextRequest) {
   return preflight(req)
 }
@@ -21,6 +26,7 @@ export async function POST(req: NextRequest) {
   const formData = await req.formData()
   const file = formData.get('file') as File | null
   if (!file) return jsonCors(req, { error: '未選擇檔案' }, { status: 400 })
+  if (!ALLOWED_MIME.has(file.type)) return jsonCors(req, { error: '不支援的檔案格式（僅接受圖片與 PDF）' }, { status: 415 })
   if (file.size > 10 * 1024 * 1024) return jsonCors(req, { error: '檔案不可超過 10MB' }, { status: 400 })
 
   const svc = createServiceClient()

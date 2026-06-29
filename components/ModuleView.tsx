@@ -4,6 +4,7 @@ import Link from 'next/link'
 import type { Module, ModuleField } from '@/lib/modules'
 import type { SessionUser } from '@/lib/types'
 import RelationSelect from '@/components/RelationSelect'
+import UserSelect from '@/components/UserSelect'
 import FilePreview from '@/components/FilePreview'
 
 const STATUS_MAP: Record<string, string> = {
@@ -48,15 +49,26 @@ export default function ModuleView({ module: mod, user: _user }: ModuleViewProps
   const [items, setItems] = useState<Record<string, unknown>[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState<Record<string, string | string[]>>({})
+  const [form, setForm] = useState<Record<string, unknown>>({})
   const [uploading, setUploading] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [savingDraft, setSavingDraft] = useState(false)
+  const [editingId, setEditingId] = useState<number | null>(null)
   const [errMsg, setErrMsg] = useState('')
 
   // 受控輸入用：只取字串值（file 多檔欄位存陣列，不綁進文字輸入）
   const sv = (k: string): string => { const v = form[k]; return typeof v === 'string' ? v : '' }
   // 取某 file 欄位已上傳的 fileId 陣列（相容單一字串與陣列）
-  const fileIdsOf = (k: string): string[] => { const v = form[k]; return Array.isArray(v) ? v : (typeof v === 'string' && v ? [v] : []) }
+  const fileIdsOf = (k: string): string[] => { const v = form[k]; return Array.isArray(v) ? (v as string[]) : (typeof v === 'string' && v ? [v] : []) }
+  // lineitem（明細表）列存取
+  const rowsOf = (k: string): Record<string, string>[] => { const v = form[k]; return Array.isArray(v) ? (v as Record<string, string>[]) : [] }
+  const addRow = (k: string) => setForm(p => ({ ...p, [k]: [...(Array.isArray(p[k]) ? (p[k] as Record<string, string>[]) : []), {}] }))
+  const removeRow = (k: string, idx: number) => setForm(p => ({ ...p, [k]: (Array.isArray(p[k]) ? (p[k] as Record<string, string>[]) : []).filter((_, i) => i !== idx) }))
+  const setCell = (k: string, idx: number, col: string, val: string) => setForm(p => {
+    const rows = Array.isArray(p[k]) ? [...(p[k] as Record<string, string>[])] : []
+    rows[idx] = { ...(rows[idx] || {}), [col]: val }
+    return { ...p, [k]: rows }
+  })
 
   useEffect(() => {
     fetch(`/api/modules/${mod.code}`)
@@ -104,28 +116,53 @@ export default function ModuleView({ module: mod, user: _user }: ModuleViewProps
     }
   }
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
+  function endpoint(mode: 'draft' | 'submit') {
+    const qs = new URLSearchParams()
+    if (mode === 'draft') qs.set('mode', 'draft')
+    if (editingId) qs.set('id', String(editingId))
+    const q = qs.toString()
+    return `/api/modules/${mod.code}${q ? '?' + q : ''}`
+  }
+
+  async function refreshList() {
+    const refreshed = await fetch(`/api/modules/${mod.code}`).then(r => r.json())
+    setItems(refreshed.items || [])
+  }
+
+  function closeForm() { setShowForm(false); setForm({}); setEditingId(null); setErrMsg('') }
+
+  // 送出(submit)會驗證可見必填欄位；存草稿(draft)允許不完整
+  async function persist(mode: 'draft' | 'submit') {
     setErrMsg('')
-    // 驗證所有可見欄位
-    for (const f of mod.fields || []) {
-      if (!fieldVisible(f, form)) continue
-      const raw = form[f.key]
-      // file 多檔欄位以「陣列非空」判斷有無值；其餘用字串
-      const valForCheck = Array.isArray(raw) ? (raw.length > 0 ? 'x' : '') : (typeof raw === 'string' ? raw : '')
-      const err = validateField(f, valForCheck)
-      if (err) { setErrMsg(err); return }
+    if (mode === 'submit') {
+      for (const f of mod.fields || []) {
+        if (!fieldVisible(f, form)) continue
+        const raw = form[f.key]
+        // file/lineitem 欄位以「陣列非空」判斷有無值；其餘用字串
+        const valForCheck = Array.isArray(raw) ? (raw.length > 0 ? 'x' : '') : (typeof raw === 'string' ? raw : '')
+        const err = validateField(f, valForCheck)
+        if (err) { setErrMsg(err); return }
+      }
     }
-    setSubmitting(true)
-    const res = await fetch(`/api/modules/${mod.code}`, {
+    if (mode === 'draft') setSavingDraft(true); else setSubmitting(true)
+    const res = await fetch(endpoint(mode), {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form)
     })
     const data = await res.json()
-    setSubmitting(false)
-    if (!res.ok) { setErrMsg(data.error || '送出失敗'); return }
-    setShowForm(false); setForm({})
-    const refreshed = await fetch(`/api/modules/${mod.code}`).then(r => r.json())
-    setItems(refreshed.items || [])
+    if (mode === 'draft') setSavingDraft(false); else setSubmitting(false)
+    if (!res.ok) { setErrMsg(data.error || (mode === 'draft' ? '草稿儲存失敗' : '送出失敗')); return }
+    closeForm()
+    await refreshList()
+  }
+
+  function handleSubmit(e: React.FormEvent) { e.preventDefault(); persist('submit') }
+
+  // 由清單載入既有草稿續編
+  async function loadDraft(id: number) {
+    setErrMsg('')
+    const d = await fetch(`/api/requests/${id}`).then(r => r.json())
+    const payload = (d?.request?.payload as Record<string, unknown>) || {}
+    setForm(payload); setEditingId(id); setShowForm(true)
   }
 
   const inputCls = 'w-full px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-2'
@@ -138,7 +175,7 @@ export default function ModuleView({ module: mod, user: _user }: ModuleViewProps
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px', flexWrap: 'wrap', gap: '8px' }}>
         <h1 style={{ fontSize: '20px', fontWeight: 600, color: 'var(--text)', letterSpacing: '-0.02em', margin: 0 }}>{mod.name}</h1>
         {(mod.kind === 'request' || mod.kind === 'record') && (
-          <button onClick={() => setShowForm(!showForm)}
+          <button onClick={() => { if (showForm) closeForm(); else { setForm({}); setEditingId(null); setShowForm(true) } }}
             style={{ background: 'var(--primary)', color: '#fff', fontSize: '13px', padding: '8px 16px', borderRadius: 'var(--radius)', border: 'none', cursor: 'pointer' }}>
             {showForm ? '取消' : '新增申請'}
           </button>
@@ -147,7 +184,7 @@ export default function ModuleView({ module: mod, user: _user }: ModuleViewProps
 
       {showForm && (
         <div style={{ background: 'var(--surface)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border)', padding: '24px', marginBottom: '24px' }}>
-          <h2 style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text)', marginTop: 0, marginBottom: '16px' }}>填寫 {mod.name}</h2>
+          <h2 style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text)', marginTop: 0, marginBottom: '16px' }}>{editingId ? '編輯草稿' : '填寫'} {mod.name}</h2>
           <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             {mod.fields?.filter(f => fieldVisible(f, form)).map(f => (
               <div key={f.key}>
@@ -156,6 +193,8 @@ export default function ModuleView({ module: mod, user: _user }: ModuleViewProps
                 </label>
                 {f.type === 'relation' ? (
                   <RelationSelect field={f} value={sv(f.key)} onChange={v => setForm(p => ({ ...p, [f.key]: v }))} />
+                ) : f.type === 'user' ? (
+                  <UserSelect value={sv(f.key)} required={f.required} onChange={v => setForm(p => ({ ...p, [f.key]: v }))} />
                 ) : f.type === 'select' ? (
                   <select required={f.required} value={sv(f.key)} className={inputCls} style={inputStyle}
                     onChange={e => setForm(p => ({ ...p, [f.key]: e.target.value }))}>
@@ -187,6 +226,61 @@ export default function ModuleView({ module: mod, user: _user }: ModuleViewProps
                       </div>
                     )}
                   </div>
+                ) : f.type === 'lineitem' ? (
+                  <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius)', overflow: 'hidden' }}>
+                    <div style={{ overflowX: 'auto' }}>
+                      <table style={{ width: '100%', fontSize: '13px', borderCollapse: 'collapse', minWidth: '480px' }}>
+                        <thead style={{ background: 'var(--surface-2)' }}>
+                          <tr>
+                            {(f.itemColumns || []).map(c => (
+                              <th key={c.key} className="label-mono" style={{ padding: '8px 10px', textAlign: 'left', whiteSpace: 'nowrap' }}>{c.label}</th>
+                            ))}
+                            <th style={{ width: 44 }} />
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {rowsOf(f.key).length === 0 && (
+                            <tr><td colSpan={(f.itemColumns || []).length + 1} style={{ padding: '10px', textAlign: 'center', color: 'var(--text-faint)' }}>尚無明細，點「新增明細」</td></tr>
+                          )}
+                          {rowsOf(f.key).map((row, ri) => (
+                            <tr key={ri} style={{ borderTop: '1px solid var(--border)' }}>
+                              {(f.itemColumns || []).map(c => (
+                                <td key={c.key} style={{ padding: '4px 6px' }}>
+                                  {c.type === 'select' ? (
+                                    <select value={row[c.key] || ''} className={inputCls} style={inputStyle} onChange={e => setCell(f.key, ri, c.key, e.target.value)}>
+                                      <option value="">—</option>
+                                      {(c.options || []).map(o => <option key={o} value={o}>{o}</option>)}
+                                    </select>
+                                  ) : (
+                                    <input
+                                      type={c.type === 'number' || c.type === 'money' ? 'number' : c.type === 'date' ? 'date' : c.type === 'time' ? 'time' : c.type === 'datetime' ? 'datetime-local' : 'text'}
+                                      value={row[c.key] || ''} className={inputCls} style={inputStyle}
+                                      onChange={e => setCell(f.key, ri, c.key, e.target.value)} />
+                                  )}
+                                </td>
+                              ))}
+                              <td style={{ padding: '4px 6px', textAlign: 'center' }}>
+                                <button type="button" onClick={() => removeRow(f.key, ri)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#e54d4d', fontSize: '12px' }}>移除</button>
+                              </td>
+                            </tr>
+                          ))}
+                          {(f.itemColumns || []).some(c => c.sum) && rowsOf(f.key).length > 0 && (
+                            <tr style={{ borderTop: '2px solid var(--border)', background: 'var(--surface-2)' }}>
+                              {(f.itemColumns || []).map((c, ci) => (
+                                <td key={c.key} className="label-mono" style={{ padding: '8px 10px', fontWeight: 600 }}>
+                                  {ci === 0 ? '總計' : c.sum ? rowsOf(f.key).reduce((s, r) => s + (Number(r[c.key]) || 0), 0).toLocaleString() : ''}
+                                </td>
+                              ))}
+                              <td />
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                    <div style={{ padding: '8px 10px', borderTop: '1px solid var(--border)' }}>
+                      <button type="button" onClick={() => addRow(f.key)} style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '4px 12px', fontSize: '12px', cursor: 'pointer', color: 'var(--text)' }}>+ 新增明細</button>
+                    </div>
+                  </div>
                 ) : (
                   <input
                     type={f.type === 'number' || f.type === 'money' ? 'number' : f.type === 'date' ? 'date' : f.type === 'datetime' ? 'datetime-local' : 'text'}
@@ -197,11 +291,17 @@ export default function ModuleView({ module: mod, user: _user }: ModuleViewProps
             ))}
             {errMsg && <div style={{ color: 'var(--danger)', fontSize: '13px', background: 'var(--danger-bg)', padding: '8px 12px', borderRadius: 'var(--radius-sm)' }}>{errMsg}</div>}
             <div style={{ display: 'flex', gap: '12px', paddingTop: '4px' }}>
-              <button type="submit" disabled={submitting || !!uploading}
+              <button type="submit" disabled={submitting || savingDraft || !!uploading}
                 style={{ background: 'var(--primary)', color: '#fff', fontSize: '13px', padding: '8px 24px', borderRadius: 'var(--radius)', border: 'none', cursor: 'pointer', opacity: submitting ? 0.5 : 1 }}>
                 {submitting ? '送出中…' : '送出申請'}
               </button>
-              <button type="button" onClick={() => { setShowForm(false); setForm({}) }}
+              {mod.kind === 'request' && (
+                <button type="button" onClick={() => persist('draft')} disabled={submitting || savingDraft || !!uploading}
+                  style={{ fontSize: '13px', padding: '8px 20px', borderRadius: 'var(--radius)', border: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text)', cursor: 'pointer', opacity: savingDraft ? 0.5 : 1 }}>
+                  {savingDraft ? '儲存中…' : '儲存草稿'}
+                </button>
+              )}
+              <button type="button" onClick={closeForm}
                 style={{ fontSize: '13px', padding: '8px 16px', borderRadius: 'var(--radius)', border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer' }}>取消</button>
             </div>
           </form>
@@ -238,7 +338,11 @@ export default function ModuleView({ module: mod, user: _user }: ModuleViewProps
                       return <td key={c.key} style={{ padding: '10px 16px', color: 'var(--text-muted)' }}>{display}</td>
                     })}
                     <td style={{ padding: '10px 16px' }}>
-                      {mod.kind === 'request' && <Link href={`/request/${String(item.id)}`} style={{ color: 'var(--primary)', fontSize: '12px', textDecoration: 'none' }}>詳情</Link>}
+                      {mod.kind === 'request' && (
+                        String(item.status) === 'draft'
+                          ? <button type="button" onClick={() => loadDraft(Number(item.id))} style={{ background: 'none', border: 'none', padding: 0, color: 'var(--primary)', fontSize: '12px', cursor: 'pointer' }}>編輯</button>
+                          : <Link href={`/request/${String(item.id)}`} style={{ color: 'var(--primary)', fontSize: '12px', textDecoration: 'none' }}>詳情</Link>
+                      )}
                     </td>
                   </tr>
                 ))}

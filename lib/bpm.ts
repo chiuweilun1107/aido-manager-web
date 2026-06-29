@@ -406,6 +406,59 @@ export async function createAndSubmit(client: SupabaseClient, user: Record<strin
   return await getReq(client, requestData.id)
 }
 
+// ---------- 草稿：儲存 / 更新 / 由草稿送出（對齊 UOF「送出後儲存副本至草稿匣」）----------
+export async function createDraft(client: SupabaseClient, user: Record<string, unknown>, moduleCode: string, payload: Record<string, unknown>, ctx: { source?: string } = {}) {
+  const mod = await getEffectiveModule(Number(user.company_id) || 1, moduleCode)
+  if (!mod || mod.kind !== 'request') throw new Error('模組不可開單: ' + moduleCode)
+  // 草稿不驗必填、不展開簽核步驟，僅落地 payload
+  const amount = mod.amountField ? Number(payload[mod.amountField]) || 0 : null
+  const title = `${mod.name} · ${user.display_name}`
+  const no = genNo(moduleCode)
+  const { data, error } = await db(client).from('requests').insert({
+    company_id: user.company_id ?? 1, request_no: no, module_code: moduleCode, form_code: moduleCode + '_request',
+    requester_user_id: user.id, requester_department_id: user.department_id || null,
+    title, status: 'draft', amount, payload_json: JSON.stringify(payload), source: ctx.source || 'manual'
+  }).select().single()
+  if (error) throw new Error('草稿儲存失敗: ' + error.message)
+  return await getReq(client, data.id)
+}
+
+export async function updateDraft(client: SupabaseClient, user: Record<string, unknown>, requestId: number, payload: Record<string, unknown>) {
+  const request = await getReq(client, requestId)
+  if (!request || request.requester_user_id !== user.id) throw new Error('無權編輯此草稿')
+  if (request.status !== 'draft') throw new Error('僅草稿可編輯')
+  const mod = await getEffectiveModule(Number(user.company_id) || 1, String(request.module_code))
+  const amount = mod?.amountField ? Number(payload[mod.amountField]) || 0 : request.amount
+  await db(client).from('requests').update({ payload_json: JSON.stringify(payload), amount, updated_at: new Date().toISOString() }).eq('id', requestId)
+  return await getReq(client, requestId)
+}
+
+export async function submitDraft(client: SupabaseClient, user: Record<string, unknown>, requestId: number, payload: Record<string, unknown>, ctx: { ip?: string; ua?: string } = {}) {
+  const request = await getReq(client, requestId)
+  if (!request || request.requester_user_id !== user.id) throw new Error('無權送出此草稿')
+  if (request.status !== 'draft') throw new Error('僅草稿可送出')
+  const moduleCode = String(request.module_code)
+  const mod = await getEffectiveModule(Number(user.company_id) || 1, moduleCode)
+  if (!mod || mod.kind !== 'request') throw new Error('模組不可開單: ' + moduleCode)
+  validateRequiredFields(mod.fields, payload)
+  await validateRelationFields(client, user, mod.fields, payload)
+  const amount = mod.amountField ? Number(payload[mod.amountField]) || 0 : null
+  const now = new Date().toISOString()
+  await db(client).from('requests').update({ payload_json: JSON.stringify(payload), amount, status: 'in_review', submitted_at: now }).eq('id', requestId)
+  const fresh = await getReq(client, requestId)
+  try {
+    await createDetail(client, moduleCode, fresh, payload)
+    await expandSteps(client, fresh, payload)
+    await syncCurrentStep(client, requestId)
+    await recordAction(client, requestId, null, Number(user.id), 'submit', 'draft', 'in_review', null, ctx)
+    await notifyActiveApprovers(client, requestId, fresh.title)
+  } catch (e) {
+    void Promise.resolve(db(client).from('requests').update({ status: 'error' }).eq('id', requestId))
+    throw e
+  }
+  return await getReq(client, requestId)
+}
+
 // ---------- 簽核動作 ----------
 export async function act(client: SupabaseClient, user: Record<string, unknown>, requestId: number, action: string, comment: string | null, ctx: { ip?: string; ua?: string } = {}) {
   const request = await getReq(client, requestId)
@@ -499,6 +552,11 @@ export async function resubmit(client: SupabaseClient, user: Record<string, unkn
   const request = await getReq(client, requestId)
   if (!request || request.requester_user_id !== user.id) throw new Error('無權重送')
   if (request.status !== 'returned') throw new Error('僅退回的單可重送')
+  // 重送也比照 createAndSubmit/submitDraft 做 server-side 驗證（杜絕退回後清空必填或竄改關聯單號繞過前端）
+  const effPayload = payload && Object.keys(payload).length > 0 ? payload : JSON.parse(request.payload_json || '{}')
+  const reMod = await getEffectiveModule(Number(user.company_id) || 1, String(request.module_code))
+  validateRequiredFields(reMod?.fields, effPayload)
+  await validateRelationFields(client, user, reMod?.fields, effPayload)
   if (payload) await db(client).from('requests').update({ payload_json: JSON.stringify(payload) }).eq('id', requestId)
   // Soft-archive old steps to preserve approval_actions FK audit trail (never hard-DELETE)
   await db(client).from('approval_steps').update({ status: 'archived' }).eq('request_id', requestId).neq('status', 'archived')

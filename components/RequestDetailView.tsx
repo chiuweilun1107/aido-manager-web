@@ -4,6 +4,7 @@ import Link from 'next/link'
 import type { SessionUser } from '@/lib/types'
 import type { ModuleField } from '@/lib/modules'
 import FilePreview from '@/components/FilePreview'
+import UserSelect from '@/components/UserSelect'
 
 const STATUS_MAP: Record<string, string> = {
   draft: '草稿', in_review: '審核中', approved: '已核准', rejected: '已駁回',
@@ -51,6 +52,19 @@ export default function RequestDetailView({ requestId, user }: { requestId: numb
   const [comment, setComment] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [errMsg, setErrMsg] = useState('')
+  const [showAddStep, setShowAddStep] = useState(false)
+  const [addStepUser, setAddStepUser] = useState('')
+  const [editing, setEditing] = useState(false)
+  const [editForm, setEditForm] = useState<Record<string, unknown>>({})
+  const [userMap, setUserMap] = useState<Record<string, string>>({})
+
+  useEffect(() => {
+    fetch('/api/directory').then(r => r.json()).then(d => {
+      const m: Record<string, string> = {}
+      for (const u of (d.members || [])) m[String(u.id)] = u.display_name
+      setUserMap(m)
+    }).catch(() => {})
+  }, [])
 
   const loadData = () => {
     setLoading(true)
@@ -76,6 +90,38 @@ export default function RequestDetailView({ requestId, user }: { requestId: numb
     if (!res.ok) { setErrMsg(d.error || '操作失敗'); return }
     setComment('')
     loadData()
+  }
+
+  // 加簽：現任簽核人指定後續關卡簽核人（後端 bpm.addStep 驗證僅現任簽核人可加簽）
+  async function handleAddStep() {
+    if (!addStepUser.trim()) { setErrMsg('請輸入加簽對象員工編號'); return }
+    setSubmitting(true); setErrMsg('')
+    const res = await fetch(`/api/requests/${requestId}/add-step`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: Number(addStepUser), name: '加簽關卡' })
+    })
+    const d = await res.json()
+    setSubmitting(false)
+    if (!res.ok) { setErrMsg(d.error || '加簽失敗'); return }
+    setAddStepUser(''); setShowAddStep(false); loadData()
+  }
+
+  // 退回後修改重送：走 /resubmit 端點（非 /act）；editing 時帶入修改後 payload
+  async function handleResubmit() {
+    setSubmitting(true); setErrMsg('')
+    const res = await fetch(`/api/requests/${requestId}/resubmit`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(editing ? { payload: editForm } : {})
+    })
+    const d = await res.json()
+    setSubmitting(false)
+    if (!res.ok) { setErrMsg(d.error || '重送失敗'); return }
+    setEditing(false); loadData()
+  }
+
+  function startEdit() {
+    setEditForm({ ...((data?.request.payload as Record<string, unknown>) || {}) })
+    setEditing(true)
   }
 
   if (loading) return <div className="text-center py-16 text-sm text-gray-400">載入中...</div>
@@ -109,7 +155,7 @@ export default function RequestDetailView({ requestId, user }: { requestId: numb
         </div>
 
         <div className="grid grid-cols-2 gap-4 text-sm">
-          {Object.entries(payload).slice(0, 12).map(([k, v]) => {
+          {Object.entries(payload).map(([k, v]) => {
             const field = (data.fields ?? []).find(f => f.key === k)
             const fileIds = field?.type === 'file' ? toFileIds(v) : null
             if (fileIds) {
@@ -122,10 +168,47 @@ export default function RequestDetailView({ requestId, user }: { requestId: numb
                 </div>
               )
             }
+            if (field?.type === 'lineitem' && Array.isArray(v)) {
+              const cols = field.itemColumns ?? []
+              const rows = v as Record<string, unknown>[]
+              return (
+                <div key={k} className="col-span-2">
+                  <span className="text-gray-500 block mb-2">{field.label || k}：</span>
+                  {rows.length === 0 ? <span className="text-gray-800">—</span> : (
+                    <div className="overflow-x-auto border border-gray-100 rounded-lg">
+                      <table className="w-full text-xs">
+                        <thead className="bg-gray-50">
+                          <tr>{cols.map(c => <th key={c.key} className="px-2 py-1.5 text-left font-medium text-gray-500 whitespace-nowrap">{c.label}</th>)}</tr>
+                        </thead>
+                        <tbody>
+                          {rows.map((row, ri) => (
+                            <tr key={ri} className="border-t border-gray-100">
+                              {cols.map(c => <td key={c.key} className="px-2 py-1.5 text-gray-700 whitespace-nowrap">{String(row[c.key] ?? '—')}</td>)}
+                            </tr>
+                          ))}
+                          {cols.some(c => c.sum) && (
+                            <tr className="border-t-2 border-gray-200 bg-gray-50 font-medium">
+                              {cols.map((c, ci) => (
+                                <td key={c.key} className="px-2 py-1.5 text-gray-700">
+                                  {ci === 0 ? '總計' : c.sum ? rows.reduce((s, r) => s + (Number(r[c.key]) || 0), 0).toLocaleString() : ''}
+                                </td>
+                              ))}
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )
+            }
+            const display = field?.type === 'user' && v != null && v !== ''
+              ? (userMap[String(v)] || `員工 #${String(v)}`)
+              : String(v ?? '—')
             return (
               <div key={k}>
                 <span className="text-gray-500">{field?.label || k}：</span>
-                <span className="text-gray-800">{String(v ?? '—')}</span>
+                <span className="text-gray-800">{display}</span>
               </div>
             )
           })}
@@ -187,6 +270,35 @@ export default function RequestDetailView({ requestId, user }: { requestId: numb
       {(canAct || canCancel || canResubmit) && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
           <h2 className="font-semibold text-gray-700 mb-4">執行操作</h2>
+
+          {canResubmit && editing && (
+            <div className="mb-4 space-y-3 border border-gray-100 rounded-lg p-4 bg-gray-50">
+              <div className="text-sm font-medium text-gray-600">修改欄位後重送</div>
+              {(data.fields ?? []).filter(f => f.type !== 'file' && f.type !== 'lineitem').map(f => (
+                <div key={f.key}>
+                  <label className="block text-xs text-gray-500 mb-1">{f.label}{f.required && <span className="text-red-500 ml-0.5">*</span>}</label>
+                  {f.type === 'user' ? (
+                    <UserSelect value={String(editForm[f.key] ?? '')} required={f.required} onChange={v => setEditForm(p => ({ ...p, [f.key]: v }))} />
+                  ) : f.type === 'select' ? (
+                    <select value={String(editForm[f.key] ?? '')} onChange={e => setEditForm(p => ({ ...p, [f.key]: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                      <option value="">請選擇</option>
+                      {(f.options ?? []).map(o => <option key={o} value={o}>{o}</option>)}
+                    </select>
+                  ) : f.type === 'textarea' ? (
+                    <textarea rows={2} value={String(editForm[f.key] ?? '')} onChange={e => setEditForm(p => ({ ...p, [f.key]: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                  ) : (
+                    <input type={f.type === 'number' || f.type === 'money' ? 'number' : f.type === 'date' ? 'date' : f.type === 'datetime' ? 'datetime-local' : 'text'}
+                      value={String(editForm[f.key] ?? '')} onChange={e => setEditForm(p => ({ ...p, [f.key]: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                  )}
+                </div>
+              ))}
+              <p className="text-xs text-gray-400">附件與明細沿用原內容；如需更改請取消後重新建立申請。</p>
+            </div>
+          )}
+
           <textarea
             value={comment}
             onChange={e => setComment(e.target.value)}
@@ -210,6 +322,10 @@ export default function RequestDetailView({ requestId, user }: { requestId: numb
                   className="bg-red-600 text-white text-sm px-5 py-2 rounded-lg hover:bg-red-700 disabled:opacity-50 transition-colors">
                   駁回
                 </button>
+                <button onClick={() => setShowAddStep(s => !s)} disabled={submitting}
+                  className="border border-gray-300 text-gray-600 text-sm px-5 py-2 rounded-lg hover:bg-gray-50 disabled:opacity-50 transition-colors">
+                  加簽
+                </button>
               </>
             )}
             {canCancel && (
@@ -219,12 +335,28 @@ export default function RequestDetailView({ requestId, user }: { requestId: numb
               </button>
             )}
             {canResubmit && (
-              <button onClick={() => handleAction('resubmit')} disabled={submitting}
-                className="bg-blue-600 text-white text-sm px-5 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors">
-                重送申請
-              </button>
+              <>
+                {!editing && (
+                  <button onClick={startEdit} disabled={submitting}
+                    className="border border-gray-300 text-gray-600 text-sm px-5 py-2 rounded-lg hover:bg-gray-50 disabled:opacity-50 transition-colors">
+                    編輯欄位
+                  </button>
+                )}
+                <button onClick={handleResubmit} disabled={submitting}
+                  className="bg-blue-600 text-white text-sm px-5 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors">
+                  重送申請
+                </button>
+              </>
             )}
           </div>
+          {canAct && showAddStep && (
+            <div className="flex items-center gap-2 mt-3">
+              <input value={addStepUser} onChange={e => setAddStepUser(e.target.value)} placeholder="加簽對象員工編號"
+                className="px-3 py-2 border border-gray-300 rounded-lg text-sm w-48" />
+              <button onClick={handleAddStep} disabled={submitting}
+                className="bg-gray-700 text-white text-sm px-4 py-2 rounded-lg hover:bg-gray-800 disabled:opacity-50">確認加簽</button>
+            </div>
+          )}
         </div>
       )}
     </div>

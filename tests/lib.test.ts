@@ -4,6 +4,8 @@ import { toCsv } from '../lib/export'
 import { getCompanyId, withCompany, DEFAULT_COMPANY_ID } from '../lib/company'
 import { t } from '../lib/i18n'
 import { formatInTimezone } from '../lib/timezone'
+import { MODULES, MODULE_MAP, withCommonFields } from '../lib/modules'
+import { CHAINS } from '../lib/chains'
 
 describe('crypto', () => {
   it('encrypt/decrypt round-trip 還原原文', () => {
@@ -69,5 +71,68 @@ describe('timezone', () => {
   })
   it('無效日期回 dash', () => {
     expect(formatInTimezone('not-a-date')).toBe('—')
+  })
+})
+
+describe('withCommonFields（共用層注入）', () => {
+  const keys = (fs: { key: string }[]) => fs.map(f => f.key)
+  it('空欄位 → 注入 priority(首) + applicant_note + attachments', () => {
+    const r = withCommonFields([])
+    expect(keys(r)).toEqual(['priority', 'applicant_note', 'attachments'])
+  })
+  it('已含 attachments(如 expense) → 不重複注入 attachments', () => {
+    const r = withCommonFields([{ key: 'amount', label: '金額', type: 'money' }, { key: 'attachments', label: '憑證', type: 'file', multiple: true }])
+    expect(keys(r).filter(k => k === 'attachments')).toHaveLength(1)
+    expect(keys(r)[0]).toBe('priority')
+    expect(keys(r)).toContain('applicant_note')
+  })
+  it('已含 priority → 不重複、不再 prepend', () => {
+    const r = withCommonFields([{ key: 'priority', label: '緊急', type: 'select' }, { key: 'x', label: 'X' }])
+    expect(keys(r).filter(k => k === 'priority')).toHaveLength(1)
+  })
+  it('idempotent：重複套用結果不變', () => {
+    const once = withCommonFields([{ key: 'a', label: 'A' }])
+    const twice = withCommonFields(once)
+    expect(keys(twice)).toEqual(keys(once))
+  })
+})
+
+describe('MODULES / CHAINS 完整性', () => {
+  const NEW_CODES = ['official_outing', 'leave_cancel', 'trip_cancel', 'overtime_cancel', 'trip_expense_report', 'entertainment', 'payment', 'equipment_borrow', 'memo', 'doc_inbound', 'doc_outbound', 'headcount_request', 'business_card', 'employment_cert', 'unpaid_leave', 'training_request']
+  it('14+ 張新表單模組皆存在', () => {
+    for (const c of NEW_CODES) expect(MODULE_MAP[c], `缺模組 ${c}`).toBeTruthy()
+  })
+  it('每個 request 模組綁定的 chain 都存在於 CHAINS（不會落 fallback HR 備查）', () => {
+    for (const m of MODULES) {
+      if (m.kind === 'request' && m.chain) expect(CHAINS[m.chain], `${m.code} 的 chain ${m.chain} 不存在`).toBeTruthy()
+    }
+  })
+  it('新增兩條通用 chain 存在且有 steps', () => {
+    for (const c of ['manager_hr_default', 'manager_admin_default']) {
+      expect(CHAINS[c]).toBeTruthy()
+      expect(CHAINS[c].steps.length).toBeGreaterThan(0)
+    }
+  })
+  it('每張 request 表單都自動帶共用欄位 priority/applicant_note/attachments', () => {
+    for (const m of MODULES) {
+      if (m.kind !== 'request') continue
+      const ks = (m.fields || []).map(f => f.key)
+      expect(ks, `${m.code} 缺 priority`).toContain('priority')
+      expect(ks, `${m.code} 缺 applicant_note`).toContain('applicant_note')
+      expect(ks, `${m.code} 缺 attachments`).toContain('attachments')
+    }
+  })
+})
+
+describe('lineitem 明細欄位', () => {
+  it('公出單 itinerary 為 lineitem 且有行程子欄', () => {
+    const f = MODULE_MAP['official_outing'].fields!.find(x => x.key === 'itinerary')!
+    expect(f.type).toBe('lineitem')
+    expect((f.itemColumns || []).map(c => c.key)).toEqual(expect.arrayContaining(['depart_date', 'from_place', 'to_place']))
+  })
+  it('出差旅費結報 items 有可加總(sum)費用子欄', () => {
+    const f = MODULE_MAP['trip_expense_report'].fields!.find(x => x.key === 'items')!
+    expect(f.type).toBe('lineitem')
+    expect((f.itemColumns || []).some(c => c.sum)).toBe(true)
   })
 })

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/server'
 import { getEffectiveModule, resolveRolePermissions } from '@/lib/platform-config'
-import { createAndSubmit } from '@/lib/bpm'
+import { createAndSubmit, createDraft, updateDraft, submitDraft } from '@/lib/bpm'
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ code: string }> }) {
   const { code } = await params
@@ -71,8 +71,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cod
   const ua = req.headers.get('user-agent') || undefined
 
   if (mod.kind === 'request') {
+    // mode=draft → 存/更新草稿；mode=submit(預設)；?id=<draftId> 代表由既有草稿更新或送出
+    const mode = req.nextUrl.searchParams.get('mode')
+    const draftId = req.nextUrl.searchParams.get('id')
     try {
-      const result = await createAndSubmit(svc, aiDoUser, code, payload, { ip, ua })
+      let result
+      if (mode === 'draft' && draftId) result = await updateDraft(svc, aiDoUser, Number(draftId), payload)
+      else if (mode === 'draft') result = await createDraft(svc, aiDoUser, code, payload, {})
+      else if (draftId) result = await submitDraft(svc, aiDoUser, Number(draftId), payload, { ip, ua })
+      else result = await createAndSubmit(svc, aiDoUser, code, payload, { ip, ua })
       return NextResponse.json({ ok: true, request: result })
     } catch (e) {
       const msg = e instanceof Error ? e.message : '送出失敗'

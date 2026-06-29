@@ -52,7 +52,18 @@ export async function getRequestDetail(svc: SupabaseClient, aiDoUser: AnyRow, id
   const payload = payloadRaw ? JSON.parse(String(payloadRaw)) : {}
   const mod = await getEffectiveModule((aiDoUser.company_id as number) ?? 1, String((request as AnyRow).module_code))
   const fields = mod?.fields ?? []
-  return { ok: true, data: { request: { ...(request as AnyRow), payload }, fields, steps: steps || [], actions: actions || [], currentUser: aiDoUser } }
+  // 敏感欄位伺服器端遮罩：非本人且角色不在 SENSITIVE_VIEW_ROLES 者，sensitive 欄位的值不送到 client（如調薪 new_salary）。
+  const isSelf = (request as AnyRow).requester_user_id === aiDoUser.id
+  const SENSITIVE_VIEW_ROLES = ['hr', 'finance', 'executive', 'auditor']
+  if (!isSelf && !SENSITIVE_VIEW_ROLES.includes(roleCode)) {
+    for (const f of fields) {
+      if (f.sensitive && payload[f.key] != null && payload[f.key] !== '') payload[f.key] = '※※※（受保護）'
+    }
+  }
+  // 移除原始 payload_json，避免被遮罩的敏感值仍以原文隨 ...request 送到 client（client 只用解析後的 payload）。
+  const requestOut: AnyRow = { ...(request as AnyRow), payload }
+  delete requestOut.payload_json
+  return { ok: true, data: { request: requestOut, fields, steps: steps || [], actions: actions || [], currentUser: aiDoUser } }
 }
 
 /** 待我簽核（active 步驟指向我或我的角色）+ 我的申請（非草稿，近 30 筆）。 */

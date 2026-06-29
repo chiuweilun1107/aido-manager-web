@@ -1,5 +1,15 @@
-export type FieldType = 'text' | 'textarea' | 'number' | 'money' | 'date' | 'datetime' | 'select' | 'user' | 'file' | 'relation'
+export type FieldType = 'text' | 'textarea' | 'number' | 'money' | 'date' | 'datetime' | 'time' | 'select' | 'user' | 'file' | 'relation' | 'lineitem'
 export type ModuleKind = 'request' | 'record' | 'view'
+
+/** lineitem（明細表）的子欄位定義：對齊 UOF 的「行程資訊 / 費用明細」可多列輸入 */
+export interface LineItemColumn {
+  key: string
+  label: string
+  type?: 'text' | 'date' | 'time' | 'datetime' | 'number' | 'money' | 'select'
+  options?: string[]
+  /** 標記此欄為各列加總來源（type=money/number），明細表底部顯示總計 */
+  sum?: boolean
+}
 
 export interface ModuleField {
   key: string
@@ -15,6 +25,8 @@ export interface ModuleField {
   validate?: { pattern?: string; min?: number; max?: number; message?: string }
   /** 檔案欄位 (type='file') 是否允許一次上傳多個檔案（值存 fileId 字串陣列） */
   multiple?: boolean
+  /** 明細表欄位 (type='lineitem') 的子欄定義；值存 payload 的物件陣列 */
+  itemColumns?: LineItemColumn[]
   /** 關聯表單 (type='relation')：下拉列出登入者自己在 sourceModule 已提出且狀態符合的單據，選後顯示該單詳情 */
   relation?: {
     sourceModule: string        // 來源模組 code，如 'business_trip'
@@ -48,7 +60,7 @@ export interface Module {
 
 const ALL = '*' as const
 
-export const MODULES: Module[] = [
+const RAW_MODULES: Module[] = [
   { code: 'approvals', name: '待簽核 / 我的申請', icon: 'clipboard-check', group: '我的工作區', kind: 'view', view: 'approvals', roles_visible: ALL },
   { code: 'ess', name: '個人設定', icon: 'cog', group: '我的工作區', kind: 'view', view: 'ess', roles_visible: ALL },
   { code: 'attendance', name: '出勤打卡', icon: 'clock', group: '我的工作區', kind: 'view', view: 'attendance', roles_visible: ALL },
@@ -56,11 +68,12 @@ export const MODULES: Module[] = [
     code: 'leave', name: '請假', icon: 'calendar', group: '我的工作區', kind: 'request',
     chain: 'leave_default', detailTable: null, roles_visible: ALL,
     fields: [
-      { key: 'leave_type', label: '假別', type: 'select', required: true, options: ['特休', '病假', '事假', '生理假', '公假', '補休'] },
-      { key: 'start_at', label: '開始時間', type: 'datetime', required: true },
-      { key: 'end_at', label: '結束時間', type: 'datetime', required: true },
-      { key: 'hours', label: '時數', type: 'number', required: true },
-      { key: 'reason', label: '事由', type: 'textarea' }
+      { key: 'leave_type', label: '假別', type: 'select', required: true, options: ['特休', '病假', '事假', '生理假', '公假', '補休', '榮譽假', '喪假', '婚假', '產假', '陪產假', '家庭照顧假'] },
+      { key: 'start_at', label: '請假時間（起）', type: 'datetime', required: true },
+      { key: 'end_at', label: '請假時間（訖）', type: 'datetime', required: true },
+      { key: 'hours', label: '請假時數', type: 'number', required: true, placeholder: '依起訖時間計算' },
+      { key: 'reason', label: '事由', type: 'textarea', required: true },
+      { key: 'deputy_user_id', label: '職務代理人', type: 'user', required: true }
     ],
     columns: [
       { key: 'request_no', label: '單號' }, { key: 'payload.leave_type', label: '假別' },
@@ -86,11 +99,14 @@ export const MODULES: Module[] = [
   {
     code: 'overtime', name: '加班申請', icon: 'clock-plus', group: '差勤', kind: 'request', chain: 'overtime_default', roles_visible: ALL,
     fields: [
+      { key: 'apply_mode', label: '申請方式', type: 'select', required: true, options: ['預先申請', '事後補辦'] },
+      { key: 'assigned_by_user_id', label: '指派人（由主管指派任務時填，送出前請先加簽指派人）', type: 'user' },
       { key: 'work_date', label: '加班日期', type: 'date', required: true },
-      { key: 'start_at', label: '開始', type: 'datetime', required: true },
-      { key: 'end_at', label: '結束', type: 'datetime', required: true },
-      { key: 'minutes', label: '分鐘', type: 'number', required: true },
-      { key: 'day_type', label: '日別', type: 'select', options: ['workday', 'rest_day', 'regular_holiday'] },
+      { key: 'day_type', label: '加班日歸屬', type: 'select', required: true, options: ['workday', 'rest_day', 'regular_holiday', 'national_holiday'] },
+      { key: 'comp_type', label: '加班折換方式', type: 'select', required: true, options: ['轉加班費', '轉補休'] },
+      { key: 'start_at', label: '加班時間（起）', type: 'datetime', required: true },
+      { key: 'end_at', label: '加班時間（訖）', type: 'datetime', required: true },
+      { key: 'minutes', label: '加班時數（分鐘）', type: 'number', required: true },
       { key: 'reason', label: '事由', type: 'textarea' }
     ],
     columns: [
@@ -114,12 +130,14 @@ export const MODULES: Module[] = [
   {
     code: 'business_trip', name: '出差申請', icon: 'briefcase', group: '行政 / 財務', kind: 'request', chain: 'business_trip_default', amountField: 'estimated_cost', roles_visible: ALL,
     fields: [
+      { key: 'trip_type', label: '出差類別', type: 'select', required: true, options: ['國內出差', '國外出差'] },
       { key: 'destination', label: '出差地點', type: 'text', required: true },
       { key: 'start_at', label: '出發日期', type: 'date', required: true },
       { key: 'end_at', label: '返回日期', type: 'date', required: true },
       { key: 'transport', label: '交通方式', type: 'select', required: true, options: ['高鐵', '台鐵', '飛機', '客運', '自行開車', '其他'] },
       { key: 'estimated_cost', label: '預估費用', type: 'money' },
-      { key: 'purpose', label: '出差目的', type: 'textarea', required: true }
+      { key: 'purpose', label: '出差目的', type: 'textarea', required: true },
+      { key: 'deputy_user_id', label: '職務代理人', type: 'user', required: true }
     ],
     columns: [
       { key: 'request_no', label: '單號' }, { key: 'payload.destination', label: '地點' },
@@ -145,6 +163,7 @@ export const MODULES: Module[] = [
   {
     code: 'procurement', name: '採購', icon: 'shopping-cart', group: '行政 / 財務', kind: 'request', chain: 'procurement_default', amountField: 'amount', roles_visible: ALL,
     fields: [
+      { key: 'procure_scope', label: '採購種類', type: 'select', required: true, options: ['一般請採購', '部門請採購'] },
       { key: 'item', label: '品項', type: 'text', required: true },
       { key: 'vendor', label: '供應商', type: 'text' },
       { key: 'category', label: '類別', type: 'select', options: ['IT', '辦公', '服務', '訓練'] },
@@ -407,8 +426,257 @@ export const MODULES: Module[] = [
   { code: 'forms', name: '表單設計器', icon: 'document-text', group: '治理 / 系統', kind: 'view', view: 'forms', roles_visible: ['hr', 'it', 'executive', 'admin_officer'] },
   { code: 'workflows', name: '簽核流程設計', icon: 'arrows-right-left', group: '治理 / 系統', kind: 'view', view: 'workflows', roles_visible: ['hr', 'it', 'executive', 'admin_officer'] },
   { code: 'menu_groups', name: '選單管理', icon: 'cog', group: '治理 / 系統', kind: 'view', view: 'menu-groups', roles_visible: ['hr', 'it', 'executive', 'admin_officer'] },
-  { code: 'audit', name: '稽核日誌', icon: 'magnifying-glass', group: '治理 / 系統', kind: 'view', view: 'audit', roles_visible: ['auditor', 'hr', 'executive', 'it'] }
+  { code: 'audit', name: '稽核日誌', icon: 'magnifying-glass', group: '治理 / 系統', kind: 'view', view: 'audit', roles_visible: ['auditor', 'hr', 'executive', 'it'] },
+
+  // ===== 對齊哈瑪星 UOF 補齊的表單（全走 payload_json，免 DB migration）=====
+  // --- 差勤類 ---
+  {
+    code: 'official_outing', name: '公出單', icon: 'briefcase', group: '差勤', kind: 'request', chain: 'manager_hr_default', roles_visible: ALL,
+    fields: [
+      { key: 'trip_type', label: '出差類別', type: 'select', required: true, options: ['國內出差', '國外出差'] },
+      { key: 'start_at', label: '預計出差時間（起）', type: 'datetime', required: true },
+      { key: 'end_at', label: '預計出差時間（訖）', type: 'datetime', required: true },
+      { key: 'reason', label: '事由', type: 'textarea', required: true },
+      {
+        key: 'itinerary', label: '行程資訊', type: 'lineitem',
+        itemColumns: [
+          { key: 'depart_date', label: '啟程日期', type: 'date' }, { key: 'depart_time', label: '啟程時間', type: 'time' },
+          { key: 'return_date', label: '迄程日期', type: 'date' }, { key: 'return_time', label: '迄程時間', type: 'time' },
+          { key: 'from_place', label: '出發地點', type: 'text' }, { key: 'to_place', label: '停留地點', type: 'text' }
+        ]
+      },
+      { key: 'deputy_user_id', label: '職務代理人', type: 'user', required: true }
+    ],
+    columns: [
+      { key: 'request_no', label: '單號' }, { key: 'payload.trip_type', label: '類別' },
+      { key: 'payload.start_at', label: '出差起' }, { key: 'status', label: '狀態', type: 'status' }
+    ]
+  },
+  {
+    code: 'leave_cancel', name: '銷假單', icon: 'calendar', group: '差勤', kind: 'request', chain: 'manager_hr_default', roles_visible: ALL,
+    fields: [
+      { key: 'orig_no', label: '原請假單號', type: 'relation', required: true, relation: { sourceModule: 'leave', status: ['approved'], labelKeys: ['leave_type', 'start_at'], valueKey: 'request_no' } },
+      { key: 'cancel_reason', label: '銷假事由', type: 'textarea', required: true }
+    ],
+    columns: [
+      { key: 'request_no', label: '單號' }, { key: 'payload.orig_no', label: '原單號' }, { key: 'status', label: '狀態', type: 'status' }
+    ]
+  },
+  {
+    code: 'trip_cancel', name: '銷差單', icon: 'briefcase', group: '差勤', kind: 'request', chain: 'manager_hr_default', roles_visible: ALL,
+    fields: [
+      { key: 'orig_no', label: '原出差單號', type: 'relation', required: true, relation: { sourceModule: 'business_trip', status: ['approved'], labelKeys: ['destination', 'start_at'], valueKey: 'request_no' } },
+      { key: 'cancel_reason', label: '銷差事由', type: 'textarea', required: true }
+    ],
+    columns: [
+      { key: 'request_no', label: '單號' }, { key: 'payload.orig_no', label: '原單號' }, { key: 'status', label: '狀態', type: 'status' }
+    ]
+  },
+  {
+    code: 'overtime_cancel', name: '銷加班單', icon: 'clock-plus', group: '差勤', kind: 'request', chain: 'manager_hr_default', roles_visible: ALL,
+    fields: [
+      { key: 'orig_no', label: '原加班單號', type: 'relation', required: true, relation: { sourceModule: 'overtime', status: ['approved'], labelKeys: ['work_date', 'minutes'], valueKey: 'request_no' } },
+      { key: 'cancel_reason', label: '銷加班事由', type: 'textarea', required: true }
+    ],
+    columns: [
+      { key: 'request_no', label: '單號' }, { key: 'payload.orig_no', label: '原單號' }, { key: 'status', label: '狀態', type: 'status' }
+    ]
+  },
+  // --- 行政 / 財務類 ---
+  {
+    code: 'trip_expense_report', name: '出差旅費結報表', icon: 'receipt', group: '行政 / 財務', kind: 'request', chain: 'expense_default', amountField: 'total_amount', roles_visible: ALL,
+    fields: [
+      { key: 'trip_type', label: '出差類別', type: 'select', required: true, options: ['國內出差', '國外出差'] },
+      { key: 'business_trip_no', label: '關聯出差單號', type: 'relation', relation: { sourceModule: 'business_trip', status: ['approved'], labelKeys: ['destination', 'start_at'], valueKey: 'request_no' } },
+      {
+        key: 'items', label: '出差行程費用明細', type: 'lineitem',
+        itemColumns: [
+          { key: 'date_from', label: '日期(起)', type: 'date' }, { key: 'date_to', label: '日期(訖)', type: 'date' },
+          { key: 'route', label: '起迄地點', type: 'text' },
+          { key: 'transport_fee', label: '交通費', type: 'money', sum: true }, { key: 'lodging_fee', label: '住宿費', type: 'money', sum: true },
+          { key: 'meal_fee', label: '膳雜費', type: 'money', sum: true }, { key: 'other_fee', label: '其他', type: 'money', sum: true }
+        ]
+      },
+      { key: 'total_amount', label: '結報總計金額', type: 'money', required: true }
+    ],
+    columns: [
+      { key: 'request_no', label: '單號' }, { key: 'amount', label: '金額', type: 'money' }, { key: 'status', label: '狀態', type: 'status' }
+    ]
+  },
+  {
+    code: 'entertainment', name: '交際宴客費用請款', icon: 'gift', group: '行政 / 財務', kind: 'request', chain: 'expense_default', amountField: 'amount', roles_visible: ALL,
+    fields: [
+      { key: 'event_date', label: '宴客日期', type: 'date', required: true },
+      { key: 'counterparty', label: '宴客對象', type: 'text', required: true },
+      { key: 'headcount', label: '人數', type: 'number' },
+      { key: 'venue', label: '地點', type: 'text' },
+      { key: 'amount', label: '金額', type: 'money', required: true },
+      { key: 'reason', label: '事由', type: 'textarea', required: true }
+    ],
+    columns: [
+      { key: 'request_no', label: '單號' }, { key: 'payload.counterparty', label: '對象' }, { key: 'amount', label: '金額', type: 'money' }, { key: 'status', label: '狀態', type: 'status' }
+    ]
+  },
+  {
+    code: 'payment', name: '請款單', icon: 'currency-dollar', group: '行政 / 財務', kind: 'request', chain: 'expense_default', amountField: 'amount', roles_visible: ALL,
+    fields: [
+      { key: 'pay_category', label: '請款類別', type: 'select', required: true, options: ['一般請款', '預付款', '代墊款', '其他'] },
+      { key: 'payee', label: '受款人', type: 'text', required: true },
+      { key: 'amount', label: '金額', type: 'money', required: true },
+      { key: 'pay_date', label: '預計付款日', type: 'date' },
+      { key: 'reason', label: '請款事由', type: 'textarea', required: true }
+    ],
+    columns: [
+      { key: 'request_no', label: '單號' }, { key: 'payload.payee', label: '受款人' }, { key: 'amount', label: '金額', type: 'money' }, { key: 'status', label: '狀態', type: 'status' }
+    ]
+  },
+  {
+    code: 'equipment_borrow', name: '公用設備借出申請', icon: 'archive-box', group: '行政 / 財務', kind: 'request', chain: 'manager_admin_default', roles_visible: ALL,
+    fields: [
+      { key: 'item_name', label: '借出物品名稱及型號', type: 'textarea', required: true },
+      { key: 'quantity', label: '數量', type: 'number', required: true, placeholder: '0 ~ 99', validate: { min: 0, max: 99 } },
+      { key: 'custody_dept', label: '物品保管單位', type: 'select', required: true, options: ['資安資訊中心', '創新研發中心', '行政管理部', '產品事業部', '數位發展一部', '數位發展二部', '數位發展三部', '數位發展五部'] },
+      {
+        key: 'borrow_period', label: '借用日期（期間）', type: 'lineitem', itemColumns: [
+          { key: 'borrow_date', label: '借用日期', type: 'date' }, { key: 'return_date', label: '歸還日期', type: 'date' }, { key: 'note', label: '備註', type: 'text' }
+        ]
+      },
+      { key: 'usage', label: '用途', type: 'textarea', required: true }
+    ],
+    columns: [
+      { key: 'request_no', label: '單號' }, { key: 'payload.custody_dept', label: '保管單位' }, { key: 'status', label: '狀態', type: 'status' }
+    ]
+  },
+  // --- 簽呈 / 公文類 ---
+  {
+    code: 'memo', name: '簽呈', icon: 'document-text', group: '簽呈 / 公文', kind: 'request', chain: 'manager_admin_default', roles_visible: ALL,
+    fields: [
+      { key: 'subject', label: '主旨', type: 'text', required: true },
+      { key: 'content', label: '內容', type: 'textarea', required: true }
+    ],
+    columns: [
+      { key: 'request_no', label: '單號' }, { key: 'payload.subject', label: '主旨' }, { key: 'status', label: '狀態', type: 'status' }
+    ]
+  },
+  {
+    code: 'doc_inbound', name: '紙本公文收文', icon: 'document', group: '簽呈 / 公文', kind: 'request', chain: 'manager_admin_default', roles_visible: ALL,
+    fields: [
+      { key: 'doc_no', label: '來文文號', type: 'text', required: true },
+      { key: 'from_org', label: '來文機關', type: 'text', required: true },
+      { key: 'subject', label: '主旨', type: 'text', required: true },
+      { key: 'recv_date', label: '收文日期', type: 'date', required: true },
+      { key: 'handling', label: '處理方式', type: 'select', options: ['擬辦', '存查', '轉陳'] }
+    ],
+    columns: [
+      { key: 'request_no', label: '單號' }, { key: 'payload.doc_no', label: '來文文號' }, { key: 'status', label: '狀態', type: 'status' }
+    ]
+  },
+  {
+    code: 'doc_outbound', name: '電子發文申請', icon: 'document-text', group: '簽呈 / 公文', kind: 'request', chain: 'manager_admin_default', roles_visible: ALL,
+    fields: [
+      { key: 'doc_type', label: '發文類別', type: 'select', required: true, options: ['函', '書函', '公告', '開會通知'] },
+      { key: 'to_org', label: '受文者', type: 'text', required: true },
+      { key: 'subject', label: '主旨', type: 'text', required: true },
+      { key: 'content', label: '說明', type: 'textarea', required: true },
+      { key: 'send_date', label: '預計發文日', type: 'date' }
+    ],
+    columns: [
+      { key: 'request_no', label: '單號' }, { key: 'payload.doc_type', label: '類別' }, { key: 'payload.subject', label: '主旨' }, { key: 'status', label: '狀態', type: 'status' }
+    ]
+  },
+  // --- 人資類（簽核表單）---
+  {
+    code: 'headcount_request', name: '人員增補申請', icon: 'user-plus', group: '人資', kind: 'request', chain: 'headcount_default',
+    roles_visible: ['manager', 'hr', 'executive', 'auditor', 'finance'],
+    fields: [
+      { key: 'department', label: '需求部門', type: 'text', required: true },
+      { key: 'position', label: '職缺名稱', type: 'text', required: true },
+      { key: 'headcount', label: '增補人數', type: 'number', required: true },
+      { key: 'employ_type', label: '聘僱型態', type: 'select', options: ['正職', '兼職', '約聘', '實習'] },
+      { key: 'reason', label: '增補原因', type: 'textarea', required: true }
+    ],
+    columns: [
+      { key: 'request_no', label: '單號' }, { key: 'payload.position', label: '職缺' }, { key: 'status', label: '狀態', type: 'status' }
+    ]
+  },
+  {
+    code: 'business_card', name: '名片申請', icon: 'identification', group: '人資', kind: 'request', chain: 'manager_admin_default', roles_visible: ALL,
+    fields: [
+      { key: 'name_zh', label: '中文姓名', type: 'text', required: true },
+      { key: 'name_en', label: '英文姓名', type: 'text' },
+      { key: 'title', label: '職稱', type: 'text' },
+      { key: 'phone', label: '聯絡電話', type: 'text' },
+      { key: 'quantity', label: '數量（盒）', type: 'number', required: true },
+      { key: 'spec', label: '規格', type: 'select', options: ['單面', '雙面'] }
+    ],
+    columns: [
+      { key: 'request_no', label: '單號' }, { key: 'payload.name_zh', label: '姓名' }, { key: 'status', label: '狀態', type: 'status' }
+    ]
+  },
+  {
+    code: 'employment_cert', name: '在職證明申請', icon: 'document', group: '人資', kind: 'request', chain: 'manager_hr_default', roles_visible: ALL,
+    fields: [
+      { key: 'purpose', label: '用途', type: 'select', required: true, options: ['銀行貸款', '簽證', '租屋', '其他'] },
+      { key: 'language', label: '語言', type: 'select', options: ['中文', '英文', '中英對照'] },
+      { key: 'copies', label: '份數', type: 'number', required: true },
+      { key: 'note', label: '備註', type: 'textarea' }
+    ],
+    columns: [
+      { key: 'request_no', label: '單號' }, { key: 'payload.purpose', label: '用途' }, { key: 'status', label: '狀態', type: 'status' }
+    ]
+  },
+  {
+    code: 'unpaid_leave', name: '留職停薪申請', icon: 'arrow-right-on-rectangle', group: '人資', kind: 'request', chain: 'personnel_default',
+    roles_visible: ALL,
+    fields: [
+      { key: 'reason_type', label: '事由', type: 'select', required: true, options: ['育嬰', '服兵役', '進修', '家庭照顧', '其他'] },
+      { key: 'start_date', label: '起始日', type: 'date', required: true },
+      { key: 'end_date', label: '預計復職日', type: 'date', required: true },
+      { key: 'detail', label: '說明', type: 'textarea' }
+    ],
+    columns: [
+      { key: 'request_no', label: '單號' }, { key: 'payload.reason_type', label: '事由' }, { key: 'payload.start_date', label: '起始日' }, { key: 'status', label: '狀態', type: 'status' }
+    ]
+  },
+  {
+    code: 'training_request', name: '教育訓練申請', icon: 'academic-cap', group: '人資', kind: 'request', chain: 'manager_hr_default', amountField: 'cost', roles_visible: ALL,
+    fields: [
+      { key: 'course_name', label: '課程名稱', type: 'text', required: true },
+      { key: 'organizer', label: '主辦單位', type: 'text' },
+      { key: 'start_date', label: '開始日期', type: 'date', required: true },
+      { key: 'end_date', label: '結束日期', type: 'date' },
+      { key: 'cost', label: '費用', type: 'money' },
+      { key: 'reason', label: '申請原因', type: 'textarea', required: true }
+    ],
+    columns: [
+      { key: 'request_no', label: '單號' }, { key: 'payload.course_name', label: '課程' }, { key: 'status', label: '狀態', type: 'status' }
+    ]
+  }
 ]
+
+// ===== 共用層：所有 request 類表單自動帶 緊急程度 / 申請者意見 / 相關附件（對齊 UOF 共同框）=====
+const PRIORITY_FIELD: ModuleField = { key: 'priority', label: '緊急程度', type: 'select', options: ['普通', '急', '緊急'], placeholder: '普通' }
+const COMMON_TAIL_FIELDS: ModuleField[] = [
+  { key: 'applicant_note', label: '申請者意見 / 備註', type: 'textarea' },
+  { key: 'attachments', label: '相關附件', type: 'file', multiple: true }
+]
+
+/** 對一組欄位注入共用欄位（依 key 去重，不覆蓋表單自有同名欄位，如 expense 已有 attachments）。
+ *  idempotent：重複套用不會重覆注入。內建 MODULES 與自訂表單(form_definitions)共用此函式，確保所有 request 表單都帶共用欄位。 */
+export function withCommonFields(fields: ModuleField[] = []): ModuleField[] {
+  const have = new Set(fields.map(f => f.key))
+  const head = have.has('priority') ? [] : [PRIORITY_FIELD]
+  const tail = COMMON_TAIL_FIELDS.filter(f => !have.has(f.key))
+  return [...head, ...fields, ...tail]
+}
+
+/** 對 request 模組注入共用欄位。 */
+function injectCommon(m: Module): Module {
+  if (m.kind !== 'request') return m
+  return { ...m, fields: withCommonFields(m.fields || []) }
+}
+
+export const MODULES: Module[] = RAW_MODULES.map(injectCommon)
 
 export const MODULE_MAP = Object.fromEntries(MODULES.map(m => [m.code, m]))
 

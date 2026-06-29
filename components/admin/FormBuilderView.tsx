@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
 import type { SessionUser } from '@/lib/types'
-import type { ModuleField, ModuleColumn, FieldType } from '@/lib/modules'
+import type { ModuleField, ModuleColumn, FieldType, LineItemColumn } from '@/lib/modules'
 import { CHAINS } from '@/lib/chains'
 import { MODULES } from '@/lib/modules'
 import Icon, { ICON_NAMES, isImageIcon } from '@/components/Icon'
@@ -55,10 +55,18 @@ const FIELD_TYPES: { value: FieldType; label: string }[] = [
   { value: 'money', label: '金額' },
   { value: 'date', label: '日期' },
   { value: 'datetime', label: '日期時間' },
+  { value: 'time', label: '時間' },
   { value: 'select', label: '下拉選單' },
   { value: 'user', label: '人員' },
   { value: 'file', label: '檔案' },
   { value: 'relation', label: '關聯表單' },
+  { value: 'lineitem', label: '明細表（多列）' },
+]
+
+// lineitem 子欄可用型別
+const LINEITEM_COL_TYPES: { value: NonNullable<LineItemColumn['type']>; label: string }[] = [
+  { value: 'text', label: '文字' }, { value: 'date', label: '日期' }, { value: 'time', label: '時間' },
+  { value: 'datetime', label: '日期時間' }, { value: 'number', label: '數字' }, { value: 'money', label: '金額' }, { value: 'select', label: '下拉' },
 ]
 
 // relation 來源模組可選清單（內建 request 模組，自訂表單於元件內補上）
@@ -251,6 +259,15 @@ function FieldRow({
     onChange({ options: next })
   }
 
+  // lineitem 子欄編輯
+  function addColumn() { onChange({ itemColumns: [...(field.itemColumns ?? []), { key: '', label: '', type: 'text' }] }) }
+  function updateColumn(i: number, patch: Partial<LineItemColumn>) {
+    const next = [...(field.itemColumns ?? [])]; next[i] = { ...next[i], ...patch }; onChange({ itemColumns: next })
+  }
+  function removeColumn(i: number) {
+    const next = [...(field.itemColumns ?? [])]; next.splice(i, 1); onChange({ itemColumns: next })
+  }
+
   return (
     <div style={{ ...card, padding: '14px 16px', marginBottom: '10px' }}>
       {/* 頂列：key / label / type / required / 操作 */}
@@ -353,6 +370,31 @@ function FieldRow({
             />
             <button type="button" onClick={addOption} style={{ ...ghostBtn }}>新增</button>
           </div>
+        </div>
+      )}
+
+      {/* lineitem 型別時編輯子欄（明細表欄位） */}
+      {(field.type === 'lineitem') && (
+        <div style={{ marginTop: '10px' }}>
+          <label style={labelStyle}>明細子欄</label>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '8px' }}>
+            {(field.itemColumns ?? []).map((col, i) => (
+              <div key={i} style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+                <input style={{ ...inputStyle, width: 'auto', flex: '1 1 110px' }} value={col.key} placeholder="子欄 key" onChange={e => updateColumn(i, { key: e.target.value })} />
+                <input style={{ ...inputStyle, width: 'auto', flex: '1 1 110px' }} value={col.label} placeholder="顯示名稱" onChange={e => updateColumn(i, { label: e.target.value })} />
+                <select style={{ ...inputStyle, width: 'auto', flex: '0 0 100px' }} value={col.type ?? 'text'} onChange={e => updateColumn(i, { type: e.target.value as LineItemColumn['type'] })}>
+                  {LINEITEM_COL_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                </select>
+                {(col.type === 'money' || col.type === 'number') && (
+                  <label style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <input type="checkbox" checked={!!col.sum} onChange={e => updateColumn(i, { sum: e.target.checked })} />加總
+                  </label>
+                )}
+                <button type="button" onClick={() => removeColumn(i)} style={dangerBtn}>刪</button>
+              </div>
+            ))}
+          </div>
+          <button type="button" onClick={addColumn} style={{ ...ghostBtn }}>+ 新增子欄</button>
         </div>
       )}
 

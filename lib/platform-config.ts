@@ -3,7 +3,7 @@
 import { createServiceClient } from './supabase/server'
 import { CHAINS } from './chains'
 import type { Chain } from './chains'
-import { MODULE_MAP, MODULES } from './modules'
+import { MODULE_MAP, MODULES, withCommonFields } from './modules'
 import type { ModuleField, ModuleColumn, Module } from './modules'
 import { ROLE_ACTIONS, ROLE_READ_SCOPE, FIELD_FULL_ACCESS, type Action } from './rbac'
 import { visibleModules } from './modules'
@@ -33,7 +33,7 @@ export async function resolveFormFields(companyId: number, moduleCode: string): 
       .order('version', { ascending: false }).limit(1).maybeSingle()
     if (data && Array.isArray(data.fields_json) && data.fields_json.length > 0) {
       return {
-        fields: data.fields_json as ModuleField[],
+        fields: withCommonFields(data.fields_json as ModuleField[]),
         columns: Array.isArray(data.columns_json) && data.columns_json.length ? (data.columns_json as ModuleColumn[]) : undefined,
         chainCode: data.chain_code || undefined,
       }
@@ -118,7 +118,7 @@ export async function getEffectiveModules(companyId: number): Promise<Module[]> 
         group: (f.group_code && groupNameByCode[f.group_code]) || f.group_name || '其他',
         kind: 'request',
         chain: f.chain_code || undefined,
-        fields: Array.isArray(f.fields_json) ? (f.fields_json as ModuleField[]) : [],
+        fields: withCommonFields(Array.isArray(f.fields_json) ? (f.fields_json as ModuleField[]) : []),
         columns: Array.isArray(f.columns_json) && f.columns_json.length ? (f.columns_json as ModuleColumn[]) : undefined,
         roles_visible: '*', // 實際可見性由 role_permissions 控 (resolveRolePermissions)
       } as Module)
@@ -139,7 +139,7 @@ export async function getEffectiveModule(companyId: number, code: string): Promi
       .eq('company_id', companyId).eq('module_code', code).eq('is_active', true)
       .order('version', { ascending: false }).limit(1).maybeSingle()
     if (data) {
-      const fields = Array.isArray(data.fields_json) ? (data.fields_json as ModuleField[]) : []
+      const fields = withCommonFields(Array.isArray(data.fields_json) ? (data.fields_json as ModuleField[]) : [])
       const amountField = fields.find(f => f.type === 'money' || f.type === 'number')?.key
       return {
         code: data.module_code, name: data.name, icon: data.icon || 'document-text',

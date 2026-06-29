@@ -122,5 +122,21 @@ export const CHAINS: Record<string, Chain> = {
       { step_no: 20, name: '部門主管', type: 'serial', condition: { field: 'estimated_cost', op: '>', value: 10000 }, approver: { resolver: 'department_manager' }, required: 'all' },
       { step_no: 30, name: '經營者核准', type: 'serial', condition: { field: 'estimated_cost', op: '>', value: 30000 }, approver: { resolver: 'role', role_code: 'executive' }, required: 'any' }
     ]
+  },
+  // 通用：直屬主管 → HR 備查（公出 / 銷單 / 在職證明 / 教育訓練）
+  manager_hr_default: {
+    chain_code: 'manager_hr_default',
+    steps: [
+      { step_no: 10, name: '直屬主管', type: 'serial', approver: { resolver: 'direct_manager', fallback: { resolver: 'department_manager' } }, required: 'all' },
+      { step_no: 20, name: 'HR 備查', type: 'serial', approver: { resolver: 'role', role_code: 'hr' }, required: 'any' }
+    ]
+  },
+  // 通用：直屬主管 → 行政管理（簽呈 / 公文 / 設備借出 / 名片）
+  manager_admin_default: {
+    chain_code: 'manager_admin_default',
+    steps: [
+      { step_no: 10, name: '直屬主管', type: 'serial', approver: { resolver: 'direct_manager', fallback: { resolver: 'department_manager' } }, required: 'all' },
+      { step_no: 20, name: '行政管理', type: 'serial', approver: { resolver: 'role', role_code: 'admin_officer' }, required: 'any' }
+    ]
   }
 }

@@ -56,8 +56,9 @@ export default function ModuleView({ module: mod, user: _user }: ModuleViewProps
   const [editingId, setEditingId] = useState<number | null>(null)
   const [errMsg, setErrMsg] = useState('')
 
-  // 受控輸入用：只取字串值（file 多檔欄位存陣列，不綁進文字輸入）
-  const sv = (k: string): string => { const v = form[k]; return typeof v === 'string' ? v : '' }
+  // 受控輸入用：純量值(string/number)轉字串；array/object(file 多檔/lineitem)回空字串不綁進文字輸入。
+  // 注意：agent 預填的草稿會把數字欄位(時數)與 user id 存成 number，故不可只認 string，否則被丟成空。
+  const sv = (k: string): string => { const v = form[k]; return (v == null || typeof v === 'object') ? '' : String(v) }
   // 取某 file 欄位已上傳的 fileId 陣列（相容單一字串與陣列）
   const fileIdsOf = (k: string): string[] => { const v = form[k]; return Array.isArray(v) ? (v as string[]) : (typeof v === 'string' && v ? [v] : []) }
   // lineitem（明細表）列存取

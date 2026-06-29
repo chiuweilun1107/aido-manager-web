@@ -20,12 +20,65 @@ function roleArmOf(user: AnyRow): string {
   return user.primary_role_id ? `,approver_role_id.eq.${user.primary_role_id}` : ''
 }
 
+// ---- 敏感欄位遮罩：單一真相 ----
+// detail（getRequestDetail）與簽核動作回傳（maskRequestForViewer）等所有「可能被非本人看到」的
+// 路徑共用同一份遮罩規則，避免邏輯在多處複製貼上而漂移（例如某處改了 SENSITIVE_VIEW_ROLES 另一處沒跟上）。
+export const SENSITIVE_VIEW_ROLES = ['hr', 'finance', 'executive', 'auditor']
+
+type ModuleFieldLike = { key: string; sensitive?: boolean }
+
+/** 依角色/本人與否，回傳「遮罩後的 payload 副本」（不 mutate 傳入物件）。
+ *  本人或角色在 SENSITIVE_VIEW_ROLES → 原值；其餘 → sensitive 欄位值換成保護字串（如調薪 new_salary）。 */
+export function maskSensitivePayload(
+  payload: Record<string, unknown>,
+  fields: ModuleFieldLike[] | undefined,
+  opts: { isSelf: boolean; roleCode: string },
+): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...payload }
+  if (opts.isSelf || SENSITIVE_VIEW_ROLES.includes(opts.roleCode)) return out
+  for (const f of fields || []) {
+    if (f.sensitive && out[f.key] != null && out[f.key] !== '') out[f.key] = '※※※（受保護）'
+  }
+  return out
+}
+
+/** 回傳移除 payload_json 原文的 row 副本：避免被遮罩的敏感值仍以原文隨 ...request 送到 client。 */
+export function stripPayloadJson<T extends AnyRow>(row: T): T {
+  const out: AnyRow = { ...row }
+  delete out.payload_json
+  return out as T
+}
+
+/** 解出本人視角的角色碼（aiDoUser 可能帶 roles join，或只有 primary_role_id）。 */
+async function resolveRoleCode(svc: SupabaseClient, aiDoUser: AnyRow): Promise<string> {
+  const joined = (aiDoUser.roles as { code?: string } | null | undefined)?.code
+  if (joined) return joined
+  if (aiDoUser.primary_role_id == null) return 'employee'
+  const { data } = await svc.schema('aido').from('roles').select('code').eq('id', aiDoUser.primary_role_id as number).single()
+  return data?.code ?? 'employee'
+}
+
+/** 把「簽核動作後回傳的 request 原始 row」轉成可安全送到 client 的版本：
+ *  依檢視者角色遮罩 sensitive 欄位 + 移除 payload_json 原文。簽核動作（act/addStep/resubmit）的回傳
+ *  可能被「非申請人的簽核人」看到（如 manager 批調薪單），故與 getRequestDetail 共用同一遮罩規則。 */
+export async function maskRequestForViewer(svc: SupabaseClient, aiDoUser: AnyRow, row: AnyRow | null): Promise<AnyRow | null> {
+  if (!row) return row
+  const roleCode = await resolveRoleCode(svc, aiDoUser)
+  const isSelf = row.requester_user_id === aiDoUser.id
+  const mod = await getEffectiveModule((row.company_id as number) ?? (aiDoUser.company_id as number) ?? 1, String(row.module_code))
+  const payload = row.payload_json ? JSON.parse(String(row.payload_json)) : {}
+  const masked = maskSensitivePayload(payload, mod?.fields ?? [], { isSelf, roleCode })
+  return stripPayloadJson({ ...row, payload: masked })
+}
+
 /** 單據詳情 + 簽核步驟 + 簽核軌跡 + 模組欄位定義（self / approver / 特權角色可看）。 */
 export async function getRequestDetail(svc: SupabaseClient, aiDoUser: AnyRow, id: number): Promise<DetailResult> {
   const db = svc.schema('aido')
   const { data: request } = await db.from('requests')
     .select('*, users!requests_requester_user_id_fkey(id,display_name,email)')
-    .eq('id', id).single()
+    .eq('id', id)
+    .eq('company_id', (aiDoUser.company_id as number) ?? 1) // 跨租戶隔離：只讓檢視者讀自己 company 的單
+    .single()
   if (!request) return { ok: false, error: 'notfound' }
 
   const { data: aiDoRole } = await db.from('roles').select('code').eq('id', aiDoUser.primary_role_id as number).single()
@@ -49,20 +102,14 @@ export async function getRequestDetail(svc: SupabaseClient, aiDoUser: AnyRow, id
   ])
 
   const payloadRaw = (request as AnyRow).payload_json
-  const payload = payloadRaw ? JSON.parse(String(payloadRaw)) : {}
+  const rawPayload = payloadRaw ? JSON.parse(String(payloadRaw)) : {}
   const mod = await getEffectiveModule((aiDoUser.company_id as number) ?? 1, String((request as AnyRow).module_code))
   const fields = mod?.fields ?? []
-  // 敏感欄位伺服器端遮罩：非本人且角色不在 SENSITIVE_VIEW_ROLES 者，sensitive 欄位的值不送到 client（如調薪 new_salary）。
+  // 敏感欄位伺服器端遮罩 + 移除 payload_json 原文：共用 maskSensitivePayload / stripPayloadJson，
+  // 與簽核動作回傳路徑（maskRequestForViewer）同一份規則，杜絕多處複製貼上而漂移。
   const isSelf = (request as AnyRow).requester_user_id === aiDoUser.id
-  const SENSITIVE_VIEW_ROLES = ['hr', 'finance', 'executive', 'auditor']
-  if (!isSelf && !SENSITIVE_VIEW_ROLES.includes(roleCode)) {
-    for (const f of fields) {
-      if (f.sensitive && payload[f.key] != null && payload[f.key] !== '') payload[f.key] = '※※※（受保護）'
-    }
-  }
-  // 移除原始 payload_json，避免被遮罩的敏感值仍以原文隨 ...request 送到 client（client 只用解析後的 payload）。
-  const requestOut: AnyRow = { ...(request as AnyRow), payload }
-  delete requestOut.payload_json
+  const payload = maskSensitivePayload(rawPayload, fields, { isSelf, roleCode })
+  const requestOut = stripPayloadJson({ ...(request as AnyRow), payload })
   return { ok: true, data: { request: requestOut, fields, steps: steps || [], actions: actions || [], currentUser: aiDoUser } }
 }
 

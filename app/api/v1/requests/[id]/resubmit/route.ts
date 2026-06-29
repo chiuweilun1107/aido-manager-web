@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
 import { authBearerUser, jsonCors, preflight } from '@/lib/agent-auth'
 import { resubmit } from '@/lib/bpm'
+import { maskRequestForViewer } from '@/lib/self-service'
 
 export async function OPTIONS(req: NextRequest) { return preflight(req) }
 
@@ -17,7 +18,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const svc = createServiceClient()
   try {
     const result = await resubmit(svc, user, Number(id), body.payload ?? {})
-    return jsonCors(req, { ok: true, request: result })
+    return jsonCors(req, { ok: true, request: await maskRequestForViewer(svc, user, result) })
   } catch (e) {
     return jsonCors(req, { error: (e as Error).message }, { status: 400 })
   }

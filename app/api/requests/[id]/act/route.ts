@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/server'
 import { act } from '@/lib/bpm'
+import { maskRequestForViewer } from '@/lib/self-service'
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -23,7 +24,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       ip: req.headers.get('x-forwarded-for') || undefined,
       ua: req.headers.get('user-agent') || undefined
     })
-    return NextResponse.json({ ok: true, request: result })
+    return NextResponse.json({ ok: true, request: await maskRequestForViewer(svc, aiDoUser, result) })
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 400 })
   }

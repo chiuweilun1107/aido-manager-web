@@ -122,7 +122,7 @@ function assessRisk(moduleCode: string, payload: Record<string, unknown>): strin
   return 'low'
 }
 
-async function resolveApprover(client: SupabaseClient, resolver: { resolver: string; role_code?: string; fallback?: { resolver: string } }, request: Record<string, unknown>): Promise<Record<string, unknown> | null> {
+export async function resolveApprover(client: SupabaseClient, resolver: { resolver: string; role_code?: string; fallback?: { resolver: string } }, request: Record<string, unknown>): Promise<Record<string, unknown> | null> {
   const requester = await getUser(client, Number(request.requester_user_id))
   if (!requester) return null
   if (resolver.resolver === 'self') return { approver_user_id: requester.id, approver_type: 'user' }
@@ -144,7 +144,7 @@ async function resolveApprover(client: SupabaseClient, resolver: { resolver: str
   return null
 }
 
-async function antiSelf(client: SupabaseClient, r: Record<string, unknown> | null, request: Record<string, unknown>): Promise<Record<string, unknown> | null> {
+export async function antiSelf(client: SupabaseClient, r: Record<string, unknown> | null, request: Record<string, unknown>): Promise<Record<string, unknown> | null> {
   if (!r) return r
   const reqUser = await getUser(client, Number(request.requester_user_id))
   if (!reqUser) return r
@@ -163,7 +163,7 @@ async function antiSelf(client: SupabaseClient, r: Record<string, unknown> | nul
   return r
 }
 
-async function buildTiers(client: SupabaseClient, chain: typeof CHAINS[string], request: Record<string, unknown>, payload: Record<string, unknown>) {
+export async function buildTiers(client: SupabaseClient, chain: typeof CHAINS[string], request: Record<string, unknown>, payload: Record<string, unknown>) {
   const tiers: Array<{ name: string; type: string; required: string; approvers: Record<string, unknown>[]; config: unknown }> = []
   for (const s of chain.steps) {
     if (!evalCond(s.condition, request, payload)) continue

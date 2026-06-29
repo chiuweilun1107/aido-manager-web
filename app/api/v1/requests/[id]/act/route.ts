@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
 import { authBearerUser, jsonCors, preflight } from '@/lib/agent-auth'
 import { act } from '@/lib/bpm'
+import { maskRequestForViewer } from '@/lib/self-service'
 
 export async function OPTIONS(req: NextRequest) { return preflight(req) }
 
@@ -25,7 +26,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       ip: req.headers.get('x-forwarded-for') || undefined,
       ua: req.headers.get('user-agent') || undefined,
     })
-    return jsonCors(req, { ok: true, request: result })
+    return jsonCors(req, { ok: true, request: await maskRequestForViewer(svc, user, result) })
   } catch (e) {
     return jsonCors(req, { error: (e as Error).message }, { status: 400 })
   }

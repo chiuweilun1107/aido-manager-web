@@ -52,7 +52,10 @@ export function middleware(request: NextRequest) {
     if (!acceptHeader.includes('text/html')) {
       return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
     }
-    return NextResponse.redirect(new URL('/login', request.url))
+    // 保留原目標(含 query，如 ?draft=) → 登入後可 redirect 回原深連結
+    const loginUrl = new URL('/login', request.url)
+    loginUrl.searchParams.set('next', request.nextUrl.pathname + request.nextUrl.search)
+    return NextResponse.redirect(loginUrl)
   }
 
   // Authenticated: proceed and set the short-lived pre-auth cookie shortcut + CDN signal header.

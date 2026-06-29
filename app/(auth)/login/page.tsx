@@ -49,7 +49,15 @@ export default function LoginPage() {
       const persist = persistOverride ?? remember
       if (persist) { localStorage.setItem(LS_CREDS, btoa(encodeURIComponent(JSON.stringify({ email: e, password: p })))) }
       else { localStorage.removeItem(LS_CREDS) }
-      router.push('/dashboard'); router.refresh()
+      // 登入後導回深連結 next（如 agent 導流的 /module/leave?draft=123）；
+      // 防 open redirect：/ 開頭、非 //、不含反斜線(WHATWG 會把 /\ 正規化成 //)、不含控制字元，
+      // 最終再用 origin 比對為唯一可信防線（擋掉任何被瀏覽器正規化成外站的字串）
+      const nextParam = new URLSearchParams(window.location.search).get('next')
+      let dest = '/dashboard'
+      if (nextParam && nextParam.startsWith('/') && !nextParam.startsWith('//') && !nextParam.includes('\\') && !/[\x00-\x1f]/.test(nextParam)) {
+        try { if (new URL(nextParam, window.location.origin).origin === window.location.origin) dest = nextParam } catch { /* 非法 URL → 留 /dashboard */ }
+      }
+      router.push(dest); router.refresh()
     } catch { setError('登入失敗，請稍後再試') } finally { setLoading(false) }
   }
 

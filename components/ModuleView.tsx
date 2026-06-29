@@ -160,10 +160,25 @@ export default function ModuleView({ module: mod, user: _user }: ModuleViewProps
   // 由清單載入既有草稿續編
   async function loadDraft(id: number) {
     setErrMsg('')
-    const d = await fetch(`/api/requests/${id}`).then(r => r.json())
+    const res = await fetch(`/api/requests/${id}`)
+    if (!res.ok) {
+      // 他人草稿(403)/不存在(404)/其他 → 報錯不開空白表單（避免綁外部 id 的誤導表單）
+      setErrMsg(res.status === 403 ? '無權存取此草稿' : res.status === 404 ? '找不到此草稿' : '草稿載入失敗')
+      return
+    }
+    const d = await res.json()
     const payload = (d?.request?.payload as Record<string, unknown>) || {}
     setForm(payload); setEditingId(id); setShowForm(true)
   }
+
+  // 深連結預填：?draft=<id> → 自動載入既有草稿續編
+  // 供 agent app 導流「對話確認 → 開公司表單頁，欄位已預填」(loadDraft 經 /api/requests/[id] 有 owner 驗證)
+  useEffect(() => {
+    if (mod.kind !== 'request') return
+    const draftId = new URLSearchParams(window.location.search).get('draft')
+    if (draftId && /^\d+$/.test(draftId)) loadDraft(Number(draftId))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mod.code])
 
   const inputCls = 'w-full px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-2'
   const inputStyle: React.CSSProperties = {

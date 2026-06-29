@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
 import { verifyApiKey } from '@/lib/apikey'
 import { createServiceClient } from '@/lib/supabase/server'
-import { createAndSubmit } from '@/lib/bpm'
+import { createAndSubmit, createDraft } from '@/lib/bpm'
 import { getEffectiveModule } from '@/lib/platform-config'
 import { authBearerUser, companyOf, jsonCors, preflight } from '@/lib/agent-auth'
 
@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
   const user = await authBearerUser(req)
   if (!user) return jsonCors(req, { error: 'Unauthorized' }, { status: 401 })
 
-  let body: { module_code?: string; payload?: Record<string, unknown> }
+  let body: { module_code?: string; payload?: Record<string, unknown>; mode?: string }
   try { body = await req.json() } catch { return jsonCors(req, { error: '無效的 JSON' }, { status: 400 }) }
   const code = body.module_code
   const payload = body.payload ?? {}
@@ -72,6 +72,18 @@ export async function POST(req: NextRequest) {
 
   const ip = req.headers.get('x-forwarded-for') || undefined
   const ua = req.headers.get('user-agent') || undefined
+
+  // mode='draft'：只落地預填草稿(不驗必填、不展開簽核)，回 draft id 供前端導到 /module/<code>?draft=<id> 續編確認
+  if (body.mode === 'draft') {
+    try {
+      const draft = await createDraft(svc, user, code, payload, { source: 'ai-agent' })
+      return jsonCors(req, { ok: true, request: draft, draft: true })
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : '草稿儲存失敗'
+      return jsonCors(req, { error: msg }, { status: 400 })
+    }
+  }
+
   try {
     const result = await createAndSubmit(svc, user, code, payload, { source: 'ai-agent', ip, ua })
     return jsonCors(req, { ok: true, request: result })

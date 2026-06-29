@@ -247,11 +247,11 @@ describe('bpm: buildTiers', () => {
       { step_no: 20, name: '財務高額', type: 'serial', condition: { field: 'amount', op: '>', value: 5000 }, approver: { resolver: 'role', role_code: 'finance' }, required: 'any' },
     ])
     const low = await buildTiers(makeClient(fixtures), chain, { requester_user_id: 1, amount: 1000 }, {})
-    expect(low).toHaveLength(1)
-    expect(low[0].approvers).toEqual([{ approver_role_id: 200, approver_type: 'role' }])
+    expect(low.tiers).toHaveLength(1)
+    expect(low.tiers[0].approvers).toEqual([{ approver_role_id: 200, approver_type: 'role' }])
 
     const high = await buildTiers(makeClient(fixtures), chain, { requester_user_id: 1, amount: 10000 }, {})
-    expect(high).toHaveLength(2)
+    expect(high.tiers).toHaveLength(2)
   })
 
   it('相鄰且同一簽核人的單人關卡會被合併去重', async () => {
@@ -261,8 +261,8 @@ describe('bpm: buildTiers', () => {
     ])
     // 直屬主管(2) 與 部門主管(2) 同一人 → 合併成 1 關
     const tiers = await buildTiers(makeClient(fixtures), chain, { requester_user_id: 1, amount: 0 }, {})
-    expect(tiers).toHaveLength(1)
-    expect(tiers[0].approvers).toEqual([{ approver_user_id: 2, approver_type: 'manager' }])
+    expect(tiers.tiers).toHaveLength(1)
+    expect(tiers.tiers[0].approvers).toEqual([{ approver_user_id: 2, approver_type: 'manager' }])
   })
 
   it('解不到簽核人的關卡被略過', async () => {
@@ -271,7 +271,8 @@ describe('bpm: buildTiers', () => {
       { step_no: 20, name: 'HR', type: 'serial', approver: { resolver: 'role', role_code: 'hr' }, required: 'any' },
     ])
     const tiers = await buildTiers(makeClient(fixtures), chain, { requester_user_id: 1, amount: 0 }, {})
-    expect(tiers).toHaveLength(1)
-    expect(tiers[0].name).toBe('HR')
+    expect(tiers.tiers).toHaveLength(1)
+    expect(tiers.tiers[0].name).toBe('HR')
+    expect(tiers.unresolvedApplicable).toBe(1) // 未知角色關卡解析失敗被計數
   })
 })

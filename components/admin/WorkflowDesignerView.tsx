@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import type { SessionUser } from '@/lib/types'
-import type { ChainStep } from '@/lib/chains'
+import type { ChainStep, ApproverRef } from '@/lib/chains'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -20,6 +20,12 @@ interface Role {
   id: number
   code: string
   name: string
+}
+
+interface UserLite {
+  id: number
+  display_name: string
+  employee_no: string | null
 }
 
 // ─── Styles (shared with other admin views) ─────────────────────────────────
@@ -100,7 +106,7 @@ const OP_LABELS: Record<string, string> = {
   '>=': '≥',
   '<': '<',
   '<=': '≤',
-  '==': '=',
+  '=': '=',
 }
 
 const REQUIRED_LABELS: Record<string, string> = {
@@ -125,6 +131,7 @@ function StepCard({
   index,
   total,
   roles,
+  users,
   onChange,
   onDelete,
   onMoveUp,
@@ -134,6 +141,7 @@ function StepCard({
   index: number
   total: number
   roles: Role[]
+  users: UserLite[]
   onChange: (s: ChainStep) => void
   onDelete: () => void
   onMoveUp: () => void
@@ -148,7 +156,8 @@ function StepCard({
     if (isParallel) {
       onChange({ ...step, approvers: [{ resolver: r }] })
     } else {
-      onChange({ ...step, approver: { resolver: r } })
+      // 換 resolver 時保留 fallback 設定（fallback 與主 resolver 正交）
+      onChange({ ...step, approver: { resolver: r, fallback: step.approver?.fallback } })
     }
   }
 
@@ -166,9 +175,40 @@ function StepCard({
     }
   }
 
-  const roleCode = isParallel
-    ? (step.approvers?.[0]?.role_code ?? '')
-    : (step.approver?.role_code ?? '')
+  function setUserId(uid: string) {
+    const val = uid ? Number(uid) : undefined
+    if (isParallel) {
+      onChange({
+        ...step,
+        approvers: (step.approvers || []).map(a => ({ ...a, user_id: val })),
+      })
+    } else {
+      onChange({
+        ...step,
+        approver: { ...(step.approver ?? { resolver: 'specific_user' }), user_id: val },
+      })
+    }
+  }
+
+  // ── 並簽多簽核人列表操作（讓 designer 能重現如 seal_default 的「行政＋法務並會」）──
+  function addApprover() {
+    onChange({ ...step, approvers: [...(step.approvers ?? []), { resolver: 'role' }] })
+  }
+  function updateApprover(idx: number, patch: Partial<ApproverRef>) {
+    onChange({ ...step, approvers: (step.approvers ?? []).map((a, i) => i === idx ? { ...a, ...patch } : a) })
+  }
+  function removeApprover(idx: number) {
+    onChange({ ...step, approvers: (step.approvers ?? []).filter((_, i) => i !== idx) })
+  }
+
+  const roleCode = step.approver?.role_code ?? ''
+  const userId = step.approver?.user_id ?? ''
+
+  // fallback 僅對 serial 步驟提供（parallel 並會語意不需要後備）
+  const fb = step.approver?.fallback
+  function setFallback(next: ChainStep['approver'] | undefined) {
+    onChange({ ...step, approver: { resolver, role_code: step.approver?.role_code, user_id: step.approver?.user_id, fallback: next } })
+  }
 
   const hasCondition = !!step.condition
   const cond = step.condition ?? { field: 'amount', op: '>', value: 0 }
@@ -265,22 +305,24 @@ function StepCard({
           </select>
         </div>
 
-        {/* Approver resolver */}
-        <div>
-          <span style={label}>簽核人</span>
-          <select
-            style={selectStyle}
-            value={resolver}
-            onChange={e => setResolver(e.target.value)}
-          >
-            {Object.entries(RESOLVER_LABELS).map(([v, l]) => (
-              <option key={v} value={v}>{l}</option>
-            ))}
-          </select>
-        </div>
+        {/* Approver resolver（序簽單一簽核人；並簽改用下方多簽核人列表） */}
+        {!isParallel && (
+          <div>
+            <span style={label}>簽核人</span>
+            <select
+              style={selectStyle}
+              value={resolver}
+              onChange={e => setResolver(e.target.value)}
+            >
+              {Object.entries(RESOLVER_LABELS).map(([v, l]) => (
+                <option key={v} value={v}>{l}</option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {/* Role code (conditional) */}
-        {resolver === 'role' && (
+        {!isParallel && resolver === 'role' && (
           <div>
             <span style={label}>角色</span>
             <select
@@ -293,6 +335,24 @@ function StepCard({
                 <option key={r.code} value={r.code}>{r.name}（{r.code}）</option>
               ))}
             </select>
+          </div>
+        )}
+
+        {/* Specific user (conditional) */}
+        {!isParallel && resolver === 'specific_user' && (
+          <div>
+            <span style={label}>指定人員</span>
+            <select
+              style={selectStyle}
+              value={String(userId)}
+              onChange={e => setUserId(e.target.value)}
+            >
+              <option value="">— 選擇人員 —</option>
+              {users.map(u => (
+                <option key={u.id} value={u.id}>{u.display_name}{u.employee_no ? `（${u.employee_no}）` : ''}</option>
+              ))}
+            </select>
+            {!userId && <span style={{ fontSize: '11px', color: 'var(--danger, #e53e3e)' }}>尚未指定人員，此關將無法解析簽核人</span>}
           </div>
         )}
 
@@ -309,6 +369,53 @@ function StepCard({
           />
         </div>
       </div>
+
+      {/* 並簽多簽核人列表（type=parallel 時；可加多位不同簽核人，如行政＋法務並會） */}
+      {isParallel && (
+        <div style={{ marginTop: '12px' }}>
+          <span style={label}>並會簽核人（全部依「通過條件」判定）</span>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '6px' }}>
+            {(step.approvers ?? []).map((a, ai) => (
+              <div key={ai} style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+                <select
+                  style={{ ...selectStyle, width: 'auto', flex: '0 0 130px' }}
+                  value={a.resolver}
+                  onChange={e => updateApprover(ai, { resolver: e.target.value, role_code: undefined, user_id: undefined })}
+                >
+                  {Object.entries(RESOLVER_LABELS).map(([v, l]) => (
+                    <option key={v} value={v}>{l}</option>
+                  ))}
+                </select>
+                {a.resolver === 'role' && (
+                  <select
+                    style={{ ...selectStyle, width: 'auto', flex: '1 1 150px' }}
+                    value={a.role_code ?? ''}
+                    onChange={e => updateApprover(ai, { role_code: e.target.value || undefined })}
+                  >
+                    <option value="">— 選擇角色 —</option>
+                    {roles.map(r => <option key={r.code} value={r.code}>{r.name}（{r.code}）</option>)}
+                  </select>
+                )}
+                {a.resolver === 'specific_user' && (
+                  <select
+                    style={{ ...selectStyle, width: 'auto', flex: '1 1 150px' }}
+                    value={String(a.user_id ?? '')}
+                    onChange={e => updateApprover(ai, { user_id: e.target.value ? Number(e.target.value) : undefined })}
+                  >
+                    <option value="">— 選擇人員 —</option>
+                    {users.map(u => <option key={u.id} value={u.id}>{u.display_name}{u.employee_no ? `（${u.employee_no}）` : ''}</option>)}
+                  </select>
+                )}
+                <button type="button" onClick={() => removeApprover(ai)} style={{ ...btnDanger, padding: '4px 10px' }}>移除</button>
+              </div>
+            ))}
+            {(step.approvers ?? []).length === 0 && (
+              <span style={{ fontSize: '11px', color: 'var(--danger, #e53e3e)' }}>並簽需至少一位簽核人</span>
+            )}
+          </div>
+          <button type="button" onClick={addApprover} style={{ ...btnSecondary, marginTop: '8px', fontSize: '12px' }}>+ 新增並會簽核人</button>
+        </div>
+      )}
 
       {/* Condition toggle */}
       <div style={{ marginTop: '12px' }}>
@@ -366,6 +473,53 @@ function StepCard({
           </div>
         )}
       </div>
+
+      {/* Fallback 後備簽核人（僅序簽；找不到主簽核人時改由後備） */}
+      {!isParallel && resolver !== 'self' && (
+        <div style={{ marginTop: '12px' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', userSelect: 'none' }}>
+            <input
+              type="checkbox"
+              checked={!!fb}
+              onChange={e => setFallback(e.target.checked ? { resolver: 'department_manager' } : undefined)}
+            />
+            <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 600 }}>找不到簽核人時改由（後備）</span>
+          </label>
+          {fb && (
+            <div style={{ display: 'flex', gap: '8px', marginTop: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+              <select
+                style={{ ...selectStyle, width: 'auto', flex: '0 0 130px' }}
+                value={fb.resolver}
+                onChange={e => setFallback({ resolver: e.target.value })}
+              >
+                {Object.entries(RESOLVER_LABELS).map(([v, l]) => (
+                  <option key={v} value={v}>{l}</option>
+                ))}
+              </select>
+              {fb.resolver === 'role' && (
+                <select
+                  style={{ ...selectStyle, width: 'auto', flex: '1 1 150px' }}
+                  value={fb.role_code ?? ''}
+                  onChange={e => setFallback({ ...fb, role_code: e.target.value || undefined })}
+                >
+                  <option value="">— 選擇角色 —</option>
+                  {roles.map(r => <option key={r.code} value={r.code}>{r.name}（{r.code}）</option>)}
+                </select>
+              )}
+              {fb.resolver === 'specific_user' && (
+                <select
+                  style={{ ...selectStyle, width: 'auto', flex: '1 1 150px' }}
+                  value={String(fb.user_id ?? '')}
+                  onChange={e => setFallback({ ...fb, user_id: e.target.value ? Number(e.target.value) : undefined })}
+                >
+                  <option value="">— 選擇人員 —</option>
+                  {users.map(u => <option key={u.id} value={u.id}>{u.display_name}{u.employee_no ? `（${u.employee_no}）` : ''}</option>)}
+                </select>
+              )}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -472,6 +626,7 @@ function NewWorkflowModal({
 export default function WorkflowDesignerView({ user: _user }: { user: SessionUser }) {
   const [templates, setTemplates] = useState<WorkflowTemplate[]>([])
   const [roles, setRoles] = useState<Role[]>([])
+  const [users, setUsers] = useState<UserLite[]>([])
   const [loading, setLoading] = useState(true)
   const [selected, setSelected] = useState<WorkflowTemplate | null>(null)
   const [steps, setSteps] = useState<ChainStep[]>([])
@@ -489,6 +644,13 @@ export default function WorkflowDesignerView({ user: _user }: { user: SessionUse
         setLoading(false)
       })
       .catch(() => { setFetchErr('載入失敗，請重新整理'); setLoading(false) })
+    // 員工清單供「指定人員」簽核人選擇；失敗不阻斷主流程（該選項顯示空清單）
+    fetch('/api/admin/employees')
+      .then(r => r.ok ? r.json() : { employees: [] })
+      .then(d => setUsers((d.employees ?? d.users ?? []).map((u: Record<string, unknown>) => ({
+        id: u.id as number, display_name: (u.display_name as string) ?? '', employee_no: (u.employee_no as string) ?? null,
+      }))))
+      .catch(() => { /* 指定人員下拉顯示空清單 */ })
   }, [])
 
   function selectTemplate(t: WorkflowTemplate) {
@@ -499,6 +661,28 @@ export default function WorkflowDesignerView({ user: _user }: { user: SessionUse
 
   async function handleSave() {
     if (!selected) return
+
+    // 存檔前驗證：擋下「會解析不到簽核人」的設定（指定人員未選人 / 指定角色未選 / fallback 未填）
+    // 避免送單時該關靜默落空 → 防止零簽核風險
+    const checkRef = (a: ApproverRef | undefined, where: string): string | null => {
+      if (!a) return null
+      if (a.resolver === 'specific_user' && !a.user_id) return `${where}：已選「指定人員」但未指定是誰`
+      if (a.resolver === 'role' && !a.role_code) return `${where}：已選「指定角色」但未選角色`
+      return checkRef(a.fallback, `${where} 的後備`)
+    }
+    for (let i = 0; i < steps.length; i++) {
+      const s = steps[i]
+      const label = `第 ${i + 1} 關「${s.name || '未命名'}」`
+      const refs: (ApproverRef | undefined)[] = s.type === 'parallel' ? (s.approvers ?? []) : [s.approver]
+      if (s.type === 'parallel' && (!s.approvers || s.approvers.length === 0)) {
+        setSaveMsg(`儲存失敗：${label} 為並簽但未設任何簽核人`); return
+      }
+      for (const r of refs) {
+        const err = checkRef(r, label)
+        if (err) { setSaveMsg('儲存失敗：' + err); return }
+      }
+    }
+
     setSaving(true)
     setSaveMsg('')
 
@@ -712,6 +896,7 @@ export default function WorkflowDesignerView({ user: _user }: { user: SessionUse
                         index={i}
                         total={steps.length}
                         roles={roles}
+                        users={users}
                         onChange={updated => updateStep(i, updated)}
                         onDelete={() => deleteStep(i)}
                         onMoveUp={() => moveStep(i, -1)}

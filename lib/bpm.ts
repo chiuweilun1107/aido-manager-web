@@ -1,5 +1,5 @@
 import { SupabaseClient } from '@supabase/supabase-js'
-import { CHAINS } from './chains'
+import { CHAINS, type ApproverRef } from './chains'
 import { resolveChain, getEffectiveModule } from './platform-config'
 import { MODULE_MAP } from './modules'
 import type { ModuleField } from './modules'
@@ -38,6 +38,29 @@ function validateRequiredFields(fields: ModuleField[] | undefined, payload: Reco
     const v = payload[f.key]
     if (v === undefined || v === null || String(v).trim() === '') {
       throw new Error(`「${f.label}」為必填`)
+    }
+  }
+}
+
+// 後端驗證規則(validate)：鏡像前端 ModuleView.validateField，做縱深防禦（杜絕繞過前端直打 API 送不合規值）
+function validateConstraints(fields: ModuleField[] | undefined, payload: Record<string, unknown>) {
+  for (const f of fields || []) {
+    if (!f.validate) continue
+    if (!fieldVisibleSrv(f, payload)) continue
+    const raw = payload[f.key]
+    if (raw === undefined || raw === null || String(raw).trim() === '') continue // 空值由 required 驗證處理
+    const val = String(raw)
+    if (f.validate.pattern) {
+      let re: RegExp | null = null
+      try { re = new RegExp(f.validate.pattern) } catch { re = null } // 無效 pattern 視為不限制（設定者問題，不傷使用者送單）
+      if (re && !re.test(val)) throw new Error(f.validate.message || `「${f.label}」格式不符`)
+    }
+    if (f.type === 'number' || f.type === 'money') {
+      const n = Number(val)
+      if (!Number.isNaN(n)) {
+        if (f.validate.min != null && n < f.validate.min) throw new Error(f.validate.message || `「${f.label}」不可小於 ${f.validate.min}`)
+        if (f.validate.max != null && n > f.validate.max) throw new Error(f.validate.message || `「${f.label}」不可大於 ${f.validate.max}`)
+      }
     }
   }
 }
@@ -122,7 +145,7 @@ function assessRisk(moduleCode: string, payload: Record<string, unknown>): strin
   return 'low'
 }
 
-export async function resolveApprover(client: SupabaseClient, resolver: { resolver: string; role_code?: string; fallback?: { resolver: string } }, request: Record<string, unknown>): Promise<Record<string, unknown> | null> {
+export async function resolveApprover(client: SupabaseClient, resolver: ApproverRef, request: Record<string, unknown>): Promise<Record<string, unknown> | null> {
   const requester = await getUser(client, Number(request.requester_user_id))
   if (!requester) return null
   if (resolver.resolver === 'self') return { approver_user_id: requester.id, approver_type: 'user' }
@@ -139,7 +162,19 @@ export async function resolveApprover(client: SupabaseClient, resolver: { resolv
   }
   if (resolver.resolver === 'role') {
     const role = resolver.role_code ? await getRole(client, resolver.role_code) : null
-    return role ? { approver_role_id: role.id, approver_type: 'role' } : null
+    if (role) return { approver_role_id: role.id, approver_type: 'role' }
+    if (resolver.fallback) return resolveApprover(client, resolver.fallback, request)
+    return null
+  }
+  if (resolver.resolver === 'specific_user') {
+    // 指定人員：須驗該 user 屬同公司且 active(防跨租戶/停用者被指派)
+    if (!resolver.user_id) return null
+    const u = await getUser(client, Number(resolver.user_id))
+    if (u && Number(u.company_id) === Number(request.company_id) && u.status === 'active') {
+      return { approver_user_id: u.id, approver_type: 'user' }
+    }
+    if (resolver.fallback) return resolveApprover(client, resolver.fallback, request)
+    return null
   }
   return null
 }
@@ -165,6 +200,8 @@ export async function antiSelf(client: SupabaseClient, r: Record<string, unknown
 
 export async function buildTiers(client: SupabaseClient, chain: typeof CHAINS[string], request: Record<string, unknown>, payload: Record<string, unknown>) {
   const tiers: Array<{ name: string; type: string; required: string; approvers: Record<string, unknown>[]; config: unknown }> = []
+  // 「條件成立(該簽)卻解析不到任何簽核人」的關卡數 → 用於防止誤設導致零簽核自動核准
+  let unresolvedApplicable = 0
   for (const s of chain.steps) {
     if (!evalCond(s.condition, request, payload)) continue
     let approvers: Record<string, unknown>[] = []
@@ -177,7 +214,7 @@ export async function buildTiers(client: SupabaseClient, chain: typeof CHAINS[st
       const r = await antiSelf(client, await resolveApprover(client, s.approver, request), request)
       if (r) approvers.push(r)
     }
-    if (!approvers.length) continue
+    if (!approvers.length) { unresolvedApplicable++; continue }
     tiers.push({ name: s.name, type: s.type || 'serial', required: s.required || 'all', approvers, config: s })
   }
   // 去重：相鄰單一簽核人相同 → 合併
@@ -188,7 +225,7 @@ export async function buildTiers(client: SupabaseClient, chain: typeof CHAINS[st
       t.approvers[0].approver_user_id && prev.approvers[0].approver_user_id === t.approvers[0].approver_user_id) continue
     final.push(t)
   }
-  return final
+  return { tiers: final, unresolvedApplicable }
 }
 
 async function expandSteps(client: SupabaseClient, request: Record<string, unknown>, payload: Record<string, unknown>) {
@@ -204,8 +241,19 @@ async function expandSteps(client: SupabaseClient, request: Record<string, unkno
     })
     return
   }
-  const tiers = await buildTiers(client, chain, request, payload)
+  const { tiers, unresolvedApplicable } = await buildTiers(client, chain, request, payload)
   if (!tiers.length) {
+    if (unresolvedApplicable > 0) {
+      // 有「該簽卻解析不到簽核人」的關卡(如設計器指定了已離職/停用者，或 specific_user 留空) →
+      // 嚴禁零簽核自動核准，改路由 HR 備查讓人覆核(與「無設定流程」fallback 一致)
+      const hr = await getRole(client, 'hr')
+      await db(client).from('approval_steps').insert({
+        request_id: request.id, company_id: request.company_id, step_no: 10, step_type: 'serial', name: 'HR 備查（流程簽核人無法解析）',
+        approver_type: 'role', approver_role_id: hr?.id ?? null, required_mode: 'any', status: 'active', started_at: new Date().toISOString()
+      })
+      return
+    }
+    // 全部關卡因條件不符而跳過(合法，如小額免簽) → 維持自動核准
     await db(client).from('requests').update({ status: 'approved', completed_at: new Date().toISOString(), current_step_no: 0 }).eq('id', request.id as number)
     await runPostHooks(client, await getReq(client, Number(request.id)))
     return
@@ -375,6 +423,7 @@ export async function createAndSubmit(client: SupabaseClient, user: Record<strin
   if (!mod || mod.kind !== 'request') throw new Error('模組不可開單: ' + moduleCode)
   // 後端再驗一次「可見必填欄位」，杜絕直接打 API 繞過前端驗證（如差旅費未填關聯出差單號）
   validateRequiredFields(mod.fields, payload)
+  validateConstraints(mod.fields, payload)
   // 關聯表單：驗證所填關聯單號是本人、狀態符合的真實單據
   await validateRelationFields(client, user, mod.fields, payload)
   const amount = mod.amountField ? Number(payload[mod.amountField]) || 0 : null
@@ -441,6 +490,7 @@ export async function submitDraft(client: SupabaseClient, user: Record<string, u
   const mod = await getEffectiveModule(Number(user.company_id) || 1, moduleCode)
   if (!mod || mod.kind !== 'request') throw new Error('模組不可開單: ' + moduleCode)
   validateRequiredFields(mod.fields, payload)
+  validateConstraints(mod.fields, payload)
   await validateRelationFields(client, user, mod.fields, payload)
   const amount = mod.amountField ? Number(payload[mod.amountField]) || 0 : null
   const now = new Date().toISOString()
@@ -556,6 +606,7 @@ export async function resubmit(client: SupabaseClient, user: Record<string, unkn
   const effPayload = payload && Object.keys(payload).length > 0 ? payload : JSON.parse(request.payload_json || '{}')
   const reMod = await getEffectiveModule(Number(user.company_id) || 1, String(request.module_code))
   validateRequiredFields(reMod?.fields, effPayload)
+  validateConstraints(reMod?.fields, effPayload)
   await validateRelationFields(client, user, reMod?.fields, effPayload)
   if (payload) await db(client).from('requests').update({ payload_json: JSON.stringify(payload) }).eq('id', requestId)
   // Soft-archive old steps to preserve approval_actions FK audit trail (never hard-DELETE)

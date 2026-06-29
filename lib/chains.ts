@@ -1,9 +1,16 @@
+export interface ApproverRef {
+  resolver: string
+  role_code?: string
+  user_id?: number
+  fallback?: ApproverRef
+}
+
 export interface ChainStep {
   step_no: number
   name: string
   type: 'serial' | 'parallel'
-  approver?: { resolver: string; role_code?: string; fallback?: { resolver: string } }
-  approvers?: Array<{ resolver: string; role_code?: string }>
+  approver?: ApproverRef
+  approvers?: ApproverRef[]
   required: 'all' | 'any'
   sla_hours?: number
   condition?: { field: string; op: string; value: number }

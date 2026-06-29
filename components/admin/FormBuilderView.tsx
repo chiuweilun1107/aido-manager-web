@@ -235,6 +235,7 @@ function FieldRow({
   onDelete,
   onMove,
   moduleOptions,
+  allFields,
 }: {
   field: ModuleField
   index: number
@@ -243,8 +244,20 @@ function FieldRow({
   onDelete: () => void
   onMove: (dir: -1 | 1) => void
   moduleOptions: { code: string; name: string }[]
+  allFields: ModuleField[]
 }) {
   const [optionInput, setOptionInput] = useState('')
+  const [showAdvanced, setShowAdvanced] = useState(
+    !!(field.showIf || field.validate),
+  )
+
+  // showIf 可引用的其他欄位（排除自己 + 無 key 的）
+  const otherFields = allFields.filter(f => f.key && f.key !== field.key)
+  const SHOWIF_OPS: { value: NonNullable<ModuleField['showIf']>['op']; label: string }[] = [
+    { value: '=', label: '等於' }, { value: '!=', label: '不等於' },
+    { value: '>', label: '大於' }, { value: '>=', label: '≥' },
+    { value: '<', label: '小於' }, { value: '<=', label: '≤' },
+  ]
 
   function addOption() {
     const v = optionInput.trim()
@@ -436,6 +449,113 @@ function FieldRow({
           <label htmlFor={`file-multi-${index}`} style={{ fontSize: '13px', color: 'var(--text-muted)', cursor: 'pointer' }}>可一次上傳多個檔案</label>
         </div>
       )}
+
+      {/* ── 進階：條件顯示 (showIf) + 驗證規則 (validate) ── */}
+      <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px dashed var(--border)' }}>
+        <button
+          type="button"
+          onClick={() => setShowAdvanced(v => !v)}
+          style={{ ...ghostBtn, fontSize: '12px', padding: '4px 10px' }}
+        >
+          {showAdvanced ? '▾ 進階（條件顯示 / 驗證規則）' : '▸ 進階（條件顯示 / 驗證規則）'}
+          {(field.showIf || field.validate) && <span style={{ marginLeft: 6, fontSize: 10, color: 'var(--primary)' }}>●已設定</span>}
+        </button>
+
+        {showAdvanced && (
+          <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            {/* 條件顯示 showIf */}
+            <div>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', userSelect: 'none', marginBottom: '6px' }}>
+                <input
+                  type="checkbox"
+                  checked={!!field.showIf}
+                  onChange={e => {
+                    if (e.target.checked) {
+                      const first = otherFields[0]?.key ?? ''
+                      onChange({ showIf: { field: first, op: '=', value: '' } })
+                    } else {
+                      onChange({ showIf: undefined })
+                    }
+                  }}
+                />
+                <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 600 }}>條件顯示（其他欄位符合條件時才顯示此欄）</span>
+              </label>
+              {field.showIf && (
+                otherFields.length === 0 ? (
+                  <div style={{ fontSize: '11px', color: '#e54d4d' }}>需先有其他「有 key」的欄位才能設條件</div>
+                ) : (
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                    <span style={{ fontSize: '12px', color: 'var(--text-faint)' }}>當</span>
+                    <select
+                      style={{ ...inputStyle, width: 'auto', flex: '1 1 130px' }}
+                      value={field.showIf.field}
+                      onChange={e => onChange({ showIf: { ...field.showIf!, field: e.target.value } })}
+                    >
+                      {otherFields.map(f => <option key={f.key} value={f.key}>{f.label || f.key}</option>)}
+                    </select>
+                    <select
+                      style={{ ...inputStyle, width: 'auto', flex: '0 0 90px' }}
+                      value={field.showIf.op}
+                      onChange={e => onChange({ showIf: { ...field.showIf!, op: e.target.value as NonNullable<ModuleField['showIf']>['op'] } })}
+                    >
+                      {SHOWIF_OPS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                    <input
+                      style={{ ...inputStyle, width: 'auto', flex: '1 1 120px' }}
+                      value={String(field.showIf.value)}
+                      placeholder="比較值"
+                      onChange={e => onChange({ showIf: { ...field.showIf!, value: e.target.value } })}
+                    />
+                  </div>
+                )
+              )}
+            </div>
+
+            {/* 驗證規則 validate */}
+            <div>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', userSelect: 'none', marginBottom: '6px' }}>
+                <input
+                  type="checkbox"
+                  checked={!!field.validate}
+                  onChange={e => onChange({ validate: e.target.checked ? {} : undefined })}
+                />
+                <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 600 }}>驗證規則</span>
+                <span style={{ fontSize: '10px', color: 'var(--text-faint)' }}>（前端驗證，送出前擋）</span>
+              </label>
+              {field.validate && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {(field.type === 'number' || field.type === 'money') && (
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                      <div style={{ flex: '1 1 120px' }}>
+                        <label style={labelStyle}>最小值</label>
+                        <input style={inputStyle} type="number" value={field.validate.min ?? ''} placeholder="不限"
+                          onChange={e => onChange({ validate: { ...field.validate, min: e.target.value === '' ? undefined : Number(e.target.value) } })} />
+                      </div>
+                      <div style={{ flex: '1 1 120px' }}>
+                        <label style={labelStyle}>最大值</label>
+                        <input style={inputStyle} type="number" value={field.validate.max ?? ''} placeholder="不限"
+                          onChange={e => onChange({ validate: { ...field.validate, max: e.target.value === '' ? undefined : Number(e.target.value) } })} />
+                      </div>
+                    </div>
+                  )}
+                  {(field.type === 'text' || field.type === 'textarea') && (
+                    <div>
+                      <label style={labelStyle}>格式 (正規表示式 pattern)</label>
+                      <input style={inputStyle} value={field.validate.pattern ?? ''} placeholder="例：^09\\d{8}$ (手機)"
+                        onChange={e => onChange({ validate: { ...field.validate, pattern: e.target.value || undefined } })} />
+                    </div>
+                  )}
+                  <div>
+                    <label style={labelStyle}>驗證失敗提示訊息</label>
+                    <input style={inputStyle} value={field.validate.message ?? ''} placeholder="例：請輸入正確的手機號碼"
+                      onChange={e => onChange({ validate: { ...field.validate, message: e.target.value || undefined } })} />
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
@@ -850,6 +970,7 @@ export default function FormBuilderView({ user: _user }: { user: SessionUser }) 
                 onDelete={() => deleteNewField(i)}
                 onMove={dir => moveNewField(i, dir)}
                 moduleOptions={moduleOptions}
+                allFields={newFields}
               />
             ))}
 
@@ -1060,6 +1181,7 @@ export default function FormBuilderView({ user: _user }: { user: SessionUser }) 
                     onDelete={() => deleteField(i)}
                     onMove={dir => moveField(i, dir)}
                     moduleOptions={moduleOptions}
+                    allFields={editFields}
                   />
                 ))}
 

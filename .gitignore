@@ -6,6 +6,9 @@ __pycache__/
 node_modules/
 .next/
 .vercel/
+.env
+.env.local
+.env*.local
 system/
 *.json.gz_*
 lh-*.json

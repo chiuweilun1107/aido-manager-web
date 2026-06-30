@@ -1,10 +1,27 @@
 // 把 code 寫死的預設 (角色權限 / 簽核流程 / 表單欄位) 種進 DB (冪等 upsert)。
 // 讓 admin UI 一開始就顯示「現狀」可編輯，而非空白；之後 admin 編輯覆寫 DB。
 import { CHAINS } from './chains'
-import { MODULES } from './modules'
+import { MODULES, MODULE_MAP } from './modules'
 import { ROLE_ACTIONS, ROLE_READ_SCOPE, FIELD_FULL_ACCESS } from './rbac'
 
 type DB = { from: (t: string) => any }
+
+// 把『單一內建 module』的 role_permissions 重新種成 code 預設（與下方 seedPlatformConfig 第1步同邏輯）。
+// 用於「還原內建表單」(刪覆寫後)：必須 re-upsert 而非 delete——resolveRolePermissions 無 per-module
+// fallback，刪掉某 module 的列會讓它從所有角色 visibleModuleCodes 消失=全公司隱藏+開單頁 404。
+// re-seed 才能把可見性/權限還原成系統內建現狀(visible 依 roles_visible、actions/read_scope 依角色)。
+export async function reseedModulePermissions(db: DB, companyId: number, moduleCode: string): Promise<void> {
+  const mod = MODULE_MAP[moduleCode]
+  if (!mod) return
+  const allRoles = Object.keys(ROLE_ACTIONS)
+  const rows = allRoles.map(role => ({
+    company_id: companyId, role_code: role, module_code: moduleCode,
+    visible: mod.roles_visible === '*' || (Array.isArray(mod.roles_visible) && mod.roles_visible.includes(role)),
+    actions: ROLE_ACTIONS[role] || ['read'],
+    read_scope: ROLE_READ_SCOPE[role] || 'self',
+  }))
+  await db.from('role_permissions').upsert(rows, { onConflict: 'company_id,role_code,module_code' })
+}
 
 export async function seedPlatformConfig(db: DB, companyId: number): Promise<string[]> {
   const results: string[] = []

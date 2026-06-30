@@ -10,7 +10,7 @@ import Icon, { ICON_NAMES, isImageIcon } from '@/components/Icon'
 // 型別
 // ──────────────────────────────────────────────
 interface FormDef {
-  id: number
+  id: number            // 正數=DB row;負數=尚無 DB 覆寫的內建表單(synthetic sentinel)
   company_id: number
   module_code: string
   form_code: string
@@ -27,6 +27,8 @@ interface FormDef {
   sort_order: number
   created_at: string
   updated_at: string
+  is_builtin?: boolean  // module_code 命中系統內建 MODULES
+  customized?: boolean  // 有對應 DB form_definitions row(內建被覆寫 or 純自訂)
 }
 
 interface MenuGroup {
@@ -741,32 +743,40 @@ export default function FormBuilderView({ user: _user }: { user: SessionUser }) 
 
   // ── 儲存 ──
   async function handleSave() {
-    if (!selectedId) return
+    if (selectedId == null || !selected) return
     const badField = editFields.find(f => !f.key.trim() || !f.label.trim())
     if (badField) { setErrMsg('每個欄位都要填「欄位 key」與「顯示名稱」'); return }
     setErrMsg(''); setSuccessMsg(''); setSaving(true)
     try {
       // group_code 變動時同步 group_name
       const selectedGroup = menuGroups.find(g => g.code === (editMeta.group_code ?? ''))
-      const res = await fetch('/api/admin/forms', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: selectedId,
-          name: editMeta.name,
-          icon: editMeta.icon || null,
-          group_code: editMeta.group_code || null,
-          group_name: selectedGroup ? selectedGroup.name : (editMeta.group_name || null),
-          visible_roles: (editMeta.visible_roles && editMeta.visible_roles.length > 0) ? editMeta.visible_roles : null,
-          chain_code: editMeta.chain_code || null,
-          is_active: editMeta.is_active,
-          fields_json: editFields,
-        }),
-      })
+      const meta = {
+        name: editMeta.name,
+        icon: editMeta.icon || null,
+        group_code: editMeta.group_code || null,
+        group_name: selectedGroup ? selectedGroup.name : (editMeta.group_name || null),
+        visible_roles: (editMeta.visible_roles && editMeta.visible_roles.length > 0) ? editMeta.visible_roles : null,
+        chain_code: editMeta.chain_code || null,
+        is_active: editMeta.is_active,
+        fields_json: editFields,
+      }
+      // 內建表單(id<0,尚無 DB 覆寫) → POST override 建立覆寫 row;既有 DB row → PUT 更新
+      const isBuiltinNew = selected.id < 0
+      const res = isBuiltinNew
+        ? await fetch('/api/admin/forms', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ override: true, module_code: selected.module_code, form_code: selected.form_code, columns_json: selected.columns_json ?? [], ...meta }),
+          })
+        : await fetch('/api/admin/forms', {
+            method: 'PUT', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: selectedId, ...meta }),
+          })
       const data = await res.json()
       if (!res.ok) { setErrMsg(data.error || '儲存失敗'); return }
-      if (data.warning) { setErrMsg(data.warning) } else { setSuccessMsg('已儲存') }
+      if (data.warning) { setErrMsg(data.warning) } else { setSuccessMsg(isBuiltinNew ? '已建立覆寫並儲存' : '已儲存') }
       await loadForms()
+      // 內建存完後 id 由負轉正 → 用回傳的新 row 重新選取,避免 selectedId 停在失效的負數
+      if (isBuiltinNew && data.form) selectForm(data.form)
       setTimeout(() => setSuccessMsg(''), 2500)
     } catch {
       setErrMsg('儲存失敗')
@@ -1041,6 +1051,14 @@ export default function FormBuilderView({ user: _user }: { user: SessionUser }) 
                     </div>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                    {/* 來源 badge：內建 / 內建·已修改 / 自訂 */}
+                    <span style={{
+                      fontSize: '10px', padding: '1px 6px', borderRadius: '99px',
+                      background: !f.is_builtin ? '#fef3c7' : f.customized ? '#dbeafe' : 'var(--surface-2)',
+                      color: !f.is_builtin ? '#b45309' : f.customized ? '#2563eb' : 'var(--text-faint)',
+                    }}>
+                      {!f.is_builtin ? '自訂' : f.customized ? '內建·已修改' : '內建'}
+                    </span>
                     <span style={{
                       fontSize: '10px', padding: '1px 6px', borderRadius: '99px',
                       background: f.is_active ? '#d1fae5' : 'var(--surface-2)',
@@ -1048,10 +1066,14 @@ export default function FormBuilderView({ user: _user }: { user: SessionUser }) 
                     }}>
                       {f.is_active ? '啟用' : '停用'}
                     </span>
-                    <button
-                      onClick={e => { e.stopPropagation(); handleDelete(f.id) }}
-                      style={{ ...dangerBtn, padding: '2px 7px', fontSize: '11px' }}
-                    >刪</button>
+                    {/* 刪除鈕只對真實 DB row(id>0);內建覆寫刪除=還原內建;純內建(id<0)無刪除鈕 */}
+                    {f.id > 0 && (
+                      <button
+                        onClick={e => { e.stopPropagation(); handleDelete(f.id) }}
+                        title={f.is_builtin ? '刪除此覆寫(還原為系統內建表單)' : '刪除此自訂表單'}
+                        style={{ ...dangerBtn, padding: '2px 7px', fontSize: '11px' }}
+                      >{f.is_builtin ? '還原' : '刪'}</button>
+                    )}
                   </div>
                 </div>
               </div>

@@ -2,9 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
 import { requireAdminUser } from '@/lib/api-guard'
 import type { ModuleField, ModuleColumn } from '@/lib/modules'
-import { MODULE_MAP } from '@/lib/modules'
+import { MODULE_MAP, MODULES } from '@/lib/modules'
+import { reseedModulePermissions } from '@/lib/seed-platform'
 
-// GET /api/admin/forms — 列出該 company 所有 form_definitions
+// GET /api/admin/forms — 列出該 company 的「所有系統表單」= 內建 MODULES + DB 覆寫合併。
+// 設計器需要看到全部內建表單(請假/報銷…)才能編輯;內建是 code 常數不在 DB,故在此合成。
+// DB form_definitions row 覆寫同 module_code 的內建(resolveFormFields 也是 DB-first,行為一致)。
+// 內建未被覆寫者給 synthetic 負數 id(sentinel):前端據此走 POST(override) 建覆寫而非 PUT。
 export async function GET() {
   const { user, error: authErr } = await requireAdminUser()
   if (authErr) return authErr
@@ -18,7 +22,64 @@ export async function GET() {
     .order('id', { ascending: true })
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ forms: data ?? [] })
+
+  const dbRows = (data ?? []).map(r => ({ ...r, is_builtin: !!MODULE_MAP[r.module_code], customized: true }))
+  const overridden = new Set(dbRows.map(r => r.module_code))
+
+  // 撈該公司 role_permissions → 算每個 module 真實可見角色集(DB-first,與 sidebar/resolveRolePermissions 同源)。
+  // 合成內建表單的 visible_roles 必須反映真實限制(如調薪只 HR 可見),否則設計器顯示「空＝全可見」會誤導,
+  // 且使用者再次編輯(PUT)時會把受限內建放寬給所有角色 → 敏感表單外洩。
+  const { data: permData } = await db
+    .from('role_permissions')
+    .select('module_code, role_code, visible')
+    .eq('company_id', user.companyId)
+  const visibleByModule = new Map<string, Set<string>>()
+  const modulesWithPerm = new Set<string>()
+  for (const p of permData ?? []) {
+    modulesWithPerm.add(p.module_code as string)
+    if (p.visible) {
+      const s = visibleByModule.get(p.module_code as string) ?? new Set<string>()
+      s.add(p.role_code as string)
+      visibleByModule.set(p.module_code as string, s)
+    }
+  }
+  // 回傳該內建模組真實可見角色：DB role_permissions 優先 → 否則 code roles_visible；全部可見回 null
+  const builtinVisibleRoles = (m: typeof MODULES[number]): string[] | null => {
+    if (modulesWithPerm.has(m.code)) {
+      const s = visibleByModule.get(m.code) ?? new Set<string>()
+      return s.size >= ALL_ROLES.length ? null : Array.from(s)
+    }
+    const rv = m.roles_visible
+    if (rv === '*' || !Array.isArray(rv)) return null
+    return rv.length >= ALL_ROLES.length ? null : rv
+  }
+
+  // 內建 request 模組中「尚無 DB 覆寫」者 → 合成唯讀基底(可編輯,存檔時建覆寫)
+  const builtinRows = MODULES
+    .filter(m => m.kind === 'request' && !overridden.has(m.code))
+    .map((m, i) => ({
+      id: -(i + 1),
+      company_id: user.companyId,
+      module_code: m.code,
+      form_code: m.code + '_request',
+      name: m.name,
+      version: 0,
+      is_active: true,
+      fields_json: m.fields ?? [],
+      columns_json: m.columns ?? [],
+      chain_code: m.chain ?? null,
+      icon: m.icon ?? null,
+      group_name: m.group ?? null,
+      group_code: null,
+      visible_roles: builtinVisibleRoles(m),
+      sort_order: 0,
+      created_at: '',
+      updated_at: '',
+      is_builtin: true,
+      customized: false,
+    }))
+
+  return NextResponse.json({ forms: [...builtinRows, ...dbRows] })
 }
 
 // 9 個固定角色
@@ -55,8 +116,10 @@ export async function POST(req: NextRequest) {
   if (!/^[A-Za-z0-9_-]+$/.test(String(module_code))) {
     return NextResponse.json({ error: '表單代碼只能用英文、數字、底線或減號' }, { status: 400 })
   }
-  // 不可佔用內建模組代碼（否則 resolveFormFields 會覆寫內建表單）
-  if (MODULE_MAP[module_code]) {
+  // 不可佔用內建模組代碼（否則 resolveFormFields 會覆寫內建表單）——
+  // 除非明確是「編輯內建表單→建立覆寫」(override=true)：此時就是要讓 DB row 覆寫內建,屬設計器正常用途。
+  const isOverride = body.override === true && !!MODULE_MAP[module_code]
+  if (MODULE_MAP[module_code] && !isOverride) {
     return NextResponse.json({ error: `表單代碼「${module_code}」已被系統內建模組使用，請換一個` }, { status: 400 })
   }
   // icon 排除長度檢查：可能是使用者上傳圖示的 data URL（遠長於一般文字）
@@ -90,24 +153,30 @@ export async function POST(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  // 自動建 role_permissions：讓新表單出現在 sidebar
-  const rolesArr: string[] = Array.isArray(visible_roles) && visible_roles.length > 0 ? visible_roles : []
-  const permRows = ALL_ROLES.map((role: RoleCode) => ({
-    company_id: user.companyId,
-    role_code: role,
-    module_code,
-    visible: rolesArr.length === 0 || rolesArr.includes(role),
-    actions: ['create', 'read'],
-    read_scope: 'self',
-  }))
+  // 自動建 role_permissions：讓新表單出現在 sidebar。
+  // 但「編輯內建表單建立覆寫」且未明確指定 visible_roles 時 → 不動權限,
+  // 保留內建原可見性(否則會把原本受限的內建表單放寬給所有角色)。新自訂表單仍照建。
+  const explicitRoles = Array.isArray(visible_roles) && visible_roles.length > 0
+  const skipPerms = isOverride && !explicitRoles
+  if (!skipPerms) {
+    const rolesArr: string[] = explicitRoles ? visible_roles : []
+    const permRows = ALL_ROLES.map((role: RoleCode) => ({
+      company_id: user.companyId,
+      role_code: role,
+      module_code,
+      visible: rolesArr.length === 0 || rolesArr.includes(role),
+      actions: ['create', 'read'],
+      read_scope: 'self',
+    }))
 
-  const { error: permErr } = await db
-    .from('role_permissions')
-    .upsert(permRows, { onConflict: 'company_id,role_code,module_code' })
+    const { error: permErr } = await db
+      .from('role_permissions')
+      .upsert(permRows, { onConflict: 'company_id,role_code,module_code' })
 
-  // 表單已建立成功；權限若失敗回 200 但附 warning，讓前端可提示「請到權限管理檢查」
-  if (permErr) {
-    return NextResponse.json({ form: data, warning: `表單已建立，但權限設定失敗：${permErr.message}` })
+    // 表單已建立成功；權限若失敗回 200 但附 warning，讓前端可提示「請到權限管理檢查」
+    if (permErr) {
+      return NextResponse.json({ form: data, warning: `表單已建立，但權限設定失敗：${permErr.message}` })
+    }
   }
 
   return NextResponse.json({ form: data })
@@ -195,7 +264,7 @@ export async function DELETE(req: NextRequest) {
 
   const { data: existing } = await db
     .from('form_definitions')
-    .select('id')
+    .select('id, module_code')
     .eq('id', id)
     .eq('company_id', user.companyId)
     .single()
@@ -208,5 +277,13 @@ export async function DELETE(req: NextRequest) {
     .eq('company_id', user.companyId)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // 刪內建覆寫＝「還原內建」：把該 module 的 role_permissions 重新種成 code 預設(re-seed,非 delete)。
+  // 不可 delete——resolveRolePermissions 無 per-module fallback,刪列會讓該內建表單從所有角色消失=
+  // 全公司隱藏+開單頁 404。re-seed 才真正還原成系統內建的可見性/權限現狀。
+  if (MODULE_MAP[existing.module_code as string]) {
+    await reseedModulePermissions(db, user.companyId, existing.module_code as string)
+  }
+
   return NextResponse.json({ ok: true })
 }

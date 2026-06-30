@@ -63,7 +63,13 @@ export async function resolveRolePermissions(companyId: number, roleCode: string
     ])
     const perms = permRes.data
     if (perms && perms.length > 0) {
-      const visibleModuleCodes = perms.filter(p => p.visible).map(p => p.module_code)
+      // per-module fallback：DB role_permissions 只覆蓋「有列的 module」；對「完全沒列的 module」
+      // (未 seed / 部分 seed) 回退 code 預設可見性。避免 all-or-nothing 脆弱——否則只要 DB 寫了
+      // 任一 module 的權限(如設計器編輯一張表單)，其餘沒列的內建 module 會全部從 sidebar 消失。
+      const dbModules = new Set(perms.map(p => p.module_code))
+      const dbVisible = perms.filter(p => p.visible).map(p => p.module_code)
+      const codeOnlyVisible = codeVisible.filter(c => !dbModules.has(c))
+      const visibleModuleCodes = Array.from(new Set([...dbVisible, ...codeOnlyVisible]))
       // actions/read_scope 取所有 module 權限的聯集 (代表此角色整體能力)；UI 設定為 per-module，整體能力取最大集
       const actSet = new Set<Action>()
       let scope: 'self' | 'team' | 'all' = 'self'

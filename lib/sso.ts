@@ -14,11 +14,11 @@ export const SSO_PROVIDERS: { id: SsoProvider; label: string }[] = [
   { id: 'azure', label: 'Microsoft (Azure AD)' },
 ]
 
-export async function signInWithSso(provider: SsoProvider) {
+export async function signInWithSso(provider: SsoProvider, next = '/dashboard') {
   const supabase = createClient()
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider,
-    options: { redirectTo: `${window.location.origin}/dashboard` },
+    options: { redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}` },
   })
   if (error) throw error
   return data

@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect, FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
+import { SSO_ENABLED, SSO_PROVIDERS, signInWithSso, type SsoProvider } from '@/lib/sso'
 
 const DEMO_ACCOUNTS = [
   { label: '員工 - 陳志明',   role: '員工',   email: 'chen.zhiming@aido.demo',   pwd: 'Aido@2026!' },
@@ -37,7 +38,25 @@ export default function LoginPage() {
   const [remember, setRemember] = useState(true)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [ssoLoading, setSsoLoading] = useState<SsoProvider | null>(null)
   const router = useRouter()
+
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('error') === 'sso_failed') {
+      setError('SSO 登入失敗，請重試或改用帳號密碼登入')
+    }
+  }, [])
+
+  async function doSso(provider: SsoProvider) {
+    setSsoLoading(provider); setError('')
+    try {
+      const nextParam = new URLSearchParams(window.location.search).get('next')
+      await signInWithSso(provider, nextParam && nextParam.startsWith('/') ? nextParam : '/dashboard')
+      // signInWithOAuth 會整頁導轉到 provider 頁面，這裡不會繼續往下執行
+    } catch {
+      setError('SSO 登入啟動失敗，請稍後再試'); setSsoLoading(null)
+    }
+  }
 
   async function doLogin(e: string, p: string, persistOverride?: boolean) {
     setLoading(true); setError('')
@@ -192,6 +211,20 @@ export default function LoginPage() {
               <div style={{ marginTop: '14px', paddingTop: '14px', borderTop: '1px solid var(--border)', fontSize: '12px', color: 'var(--text-faint)', textAlign: 'center' }}>
                 登入後將依角色載入對應儀表板
               </div>
+
+              {SSO_ENABLED && (
+                <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid var(--border)' }}>
+                  <div className="label-mono" style={{ marginBottom: '10px', textAlign: 'center', color: 'var(--text-faint)' }}>或使用企業 SSO 登入</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {SSO_PROVIDERS.map(p => (
+                      <button key={p.id} type="button" onClick={() => doSso(p.id)} disabled={ssoLoading !== null || loading}
+                        style={{ width: '100%', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '10px', fontSize: '14px', fontWeight: 600, color: 'var(--text)', cursor: ssoLoading !== null ? 'not-allowed' : 'pointer' }}>
+                        {ssoLoading === p.id ? '導向中…' : `使用 ${p.label} 登入`}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Demo Role Access — 角色快速登入 */}

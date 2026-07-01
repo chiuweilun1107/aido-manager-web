@@ -276,14 +276,16 @@ export default function DashboardView({ user, shortcuts }: { user: SessionUser; 
 
   return (
     <>
-      <style>{`
+      {/* 純文字 children 的 <style> 在 SSR 會把 `>` 轉成 &gt;，但 client hydrate 時不會，
+          兩邊文字不一致觸發 hydration mismatch；改用 dangerouslySetInnerHTML 讓兩邊都是原始字串，不經過 React 文字跳脫 */}
+      <style dangerouslySetInnerHTML={{ __html: `
         /* minmax(0,1fr) + min-width:0 讓 grid cell 可縮小於內容 min-content，
            否則 KPI(900)/INBOX(640) 撐破 cell → 整頁橫向溢出右側被切 */
         .dash-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:16px; }
         .dash-grid > * { min-width: 0; }
         @media (max-width:768px){ .dash-grid { grid-template-columns:minmax(0,1fr) !important; } .dash-grid > * { grid-column: span 1 !important; min-width: 0; } }
         .edit-ctrl { position:absolute; top:8px; right:8px; z-index:5; display:flex; gap:4px; }
-      `}</style>
+      ` }} />
 
       <div style={{ maxWidth: '1280px', margin: '0 auto' }}>
         {/* 工具列 */}

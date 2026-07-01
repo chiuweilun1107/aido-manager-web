@@ -20,7 +20,9 @@ export function middleware(request: NextRequest) {
   }
 
   // Early exit for public routes — skip all expensive work (cookie extraction, Supabase URL parse, JWT decode)
-  if (pathname.startsWith('/login') || pathname.startsWith('/api')) {
+  // /auth/callback 必須放行：OAuth/SSO code 換 session 那一刻請求者還沒有 auth cookie，
+  // 若不放行會被下方導回 /login，PKCE code exchange 永遠跑不到。
+  if (pathname.startsWith('/login') || pathname.startsWith('/api') || pathname.startsWith('/auth/callback')) {
     return NextResponse.next()
   }
 

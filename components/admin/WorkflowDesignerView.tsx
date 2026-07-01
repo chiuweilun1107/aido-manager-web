@@ -731,9 +731,10 @@ export default function WorkflowDesignerView({ user: _user }: { user: SessionUse
   }
 
   async function handleToggleActive(t: WorkflowTemplate) {
-    // 內建流程尚無 DB 覆寫(id<0)：resolveChain 對 inactive DB row 會 fallback 回 code CHAIN,
-    // 切換啟用其實無效果 → 先請使用者編輯儲存(建覆寫)再切,避免誤導。
-    if (t.id < 0) { setSaveMsg('內建流程請先編輯並儲存(建立覆寫)後，才能切換啟用狀態'); setTimeout(() => setSaveMsg(''), 3000); return }
+    // 系統內建流程一律無法停用(含已覆寫的內建 id>0)：resolveChain 對 inactive/缺 DB row 一律
+    // fallback 回 code CHAIN,送單永遠套用內建流程以確保有簽核。允許切換只會造成「badge 顯停用
+    // 但實際仍生效」的誤導(M1)。要調整內建流程請直接編輯關卡。只有 custom 流程可切換啟用。
+    if (t.is_builtin) { setSaveMsg('系統內建流程無法停用（送單一律套用內建流程以確保有簽核）；如要調整請直接編輯關卡'); setTimeout(() => setSaveMsg(''), 3500); return }
     const res = await fetch('/api/admin/workflows', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -971,9 +972,11 @@ export default function WorkflowDesignerView({ user: _user }: { user: SessionUse
       {showNew && (
         <NewWorkflowModal
           onClose={() => setShowNew(false)}
-          onCreated={t => {
-            setTemplates(prev => [...prev, t])
+          onCreated={async t => {
+            // reload 而非直接 append：若新增的 chain_code 恰好覆蓋某內建流程，
+            // 直接 append 會與該內建的 synthetic 列並存造成重複，reload 才會正確去重(L1 修)。
             setShowNew(false)
+            await reloadTemplates()
             selectTemplate(t)
           }}
         />

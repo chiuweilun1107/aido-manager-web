@@ -43,9 +43,18 @@ export async function GET(req: NextRequest) {
   let q = svc.schema('aido').from('requests')
     .select('id, request_no, module_code, title, status, amount, payload_json, created_at')
     .eq('requester_user_id', user.id as number).eq('company_id', companyId)
-  if (moduleParam) q = q.eq('module_code', moduleParam)
-  if (statusFilter.length > 0) q = q.in('status', statusFilter)
-  const { data } = await q.order('created_at', { ascending: false }).limit(50)
+  // count 查詢跟 data 查詢用同一組過濾條件，但不受下方 limit(50) 影響 —
+  // data 是給「relation 候選下拉選單」用的預覽清單，limit(50) 對那個用途合理；
+  // total 是給呼叫方(如 widget)算「本人真實總數」用的，兩者語意不同，不能共用同一個 limit。
+  let countQ = svc.schema('aido').from('requests')
+    .select('id', { count: 'exact', head: true })
+    .eq('requester_user_id', user.id as number).eq('company_id', companyId)
+  if (moduleParam) { q = q.eq('module_code', moduleParam); countQ = countQ.eq('module_code', moduleParam) }
+  if (statusFilter.length > 0) { q = q.in('status', statusFilter); countQ = countQ.in('status', statusFilter) }
+  const [{ data }, { count }] = await Promise.all([
+    q.order('created_at', { ascending: false }).limit(50),
+    countQ,
+  ])
 
   const items = (data || []).map((r: Record<string, unknown>) => {
     const payload = parsePayload(r)
@@ -53,7 +62,7 @@ export async function GET(req: NextRequest) {
     delete rest.payload_json
     return { ...rest, payload }
   })
-  return jsonCors(req, { data: items })
+  return jsonCors(req, { data: items, total: count ?? items.length })
 }
 
 /** POST：使用者 JWT → 以本人身分開單(走 createAndSubmit，後端驗證零繞過)，source='ai-agent' */
